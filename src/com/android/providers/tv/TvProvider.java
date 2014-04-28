@@ -18,7 +18,6 @@ package com.android.providers.tv;
 
 import android.content.ComponentName;
 import android.content.ContentProvider;
-import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.UriMatcher;
@@ -30,8 +29,6 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.database.sqlite.SQLiteQueryBuilder;
 import android.net.Uri;
-import android.os.Binder;
-import android.os.Process;
 import android.provider.TvContract;
 import android.provider.TvContract.BaseTvColumns;
 import android.provider.TvContract.Channels;
@@ -54,10 +51,18 @@ public class TvProvider extends ContentProvider {
     private static final UriMatcher sUriMatcher;
     private static final int MATCH_CHANNEL = 1;
     private static final int MATCH_CHANNEL_ID = 2;
-    private static final int MATCH_PROGRAM = 3;
-    private static final int MATCH_PROGRAM_ID = 4;
-    private static final int MATCH_WATCHED_PROGRAM = 5;
-    private static final int MATCH_WATCHED_PROGRAM_ID = 6;
+    private static final int MATCH_CHANNEL_ID_PROGRAM = 3;
+    private static final int MATCH_INPUT_PACKAGE_SERVICE_CHANNEL = 4;
+    private static final int MATCH_PROGRAM = 5;
+    private static final int MATCH_PROGRAM_ID = 6;
+    private static final int MATCH_WATCHED_PROGRAM = 7;
+    private static final int MATCH_WATCHED_PROGRAM_ID = 8;
+
+    private static final String SELECTION_OVERLAPPED_PROGRAM = Programs.CHANNEL_ID + "=? AND "
+            + Programs.START_TIME_UTC_MILLIS + "<? AND " + Programs.END_TIME_UTC_MILLIS + ">?";
+
+    private static final String SELECTION_CHANNEL_BY_INPUT = Channels.PACKAGE_NAME + "=? AND "
+            + Channels.SERVICE_NAME + "=?";
 
     private static HashMap<String, String> sChannelProjectionMap;
     private static HashMap<String, String> sProgramProjectionMap;
@@ -65,12 +70,14 @@ public class TvProvider extends ContentProvider {
 
     static {
         sUriMatcher = new UriMatcher(UriMatcher.NO_MATCH);
-        sUriMatcher.addURI(TvContract.AUTHORITY, "channel/#", MATCH_CHANNEL_ID);
         sUriMatcher.addURI(TvContract.AUTHORITY, "channel", MATCH_CHANNEL);
-        sUriMatcher.addURI(TvContract.AUTHORITY, "program/#", MATCH_PROGRAM_ID);
+        sUriMatcher.addURI(TvContract.AUTHORITY, "channel/#", MATCH_CHANNEL_ID);
+        sUriMatcher.addURI(TvContract.AUTHORITY, "channel/#/program", MATCH_CHANNEL_ID_PROGRAM);
+        sUriMatcher.addURI(TvContract.AUTHORITY, "input/*/*/channel", MATCH_INPUT_PACKAGE_SERVICE_CHANNEL);
         sUriMatcher.addURI(TvContract.AUTHORITY, "program", MATCH_PROGRAM);
-        sUriMatcher.addURI(TvContract.AUTHORITY, "watched_program/#", MATCH_WATCHED_PROGRAM_ID);
+        sUriMatcher.addURI(TvContract.AUTHORITY, "program/#", MATCH_PROGRAM_ID);
         sUriMatcher.addURI(TvContract.AUTHORITY, "watched_program", MATCH_WATCHED_PROGRAM);
+        sUriMatcher.addURI(TvContract.AUTHORITY, "watched_program/#", MATCH_WATCHED_PROGRAM_ID);
 
         sChannelProjectionMap = new HashMap<String, String>();
         sChannelProjectionMap.put(Channels._ID, Channels._ID);
@@ -209,6 +216,10 @@ public class TvProvider extends ContentProvider {
                 return Channels.CONTENT_TYPE;
             case MATCH_CHANNEL_ID:
                 return Channels.CONTENT_ITEM_TYPE;
+            case MATCH_CHANNEL_ID_PROGRAM:
+                return Programs.CONTENT_TYPE;
+            case MATCH_INPUT_PACKAGE_SERVICE_CHANNEL:
+                return Channels.CONTENT_TYPE;
             case MATCH_PROGRAM:
                 return Programs.CONTENT_TYPE;
             case MATCH_PROGRAM_ID:
@@ -225,8 +236,15 @@ public class TvProvider extends ContentProvider {
     @Override
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
             String sortOrder) {
+        if (needsToLimitPackage(uri)) {
+            if (!TextUtils.isEmpty(selection)) {
+                throw new IllegalArgumentException("Selection not allowed for " + uri);
+            }
+            selection = BaseTvColumns.PACKAGE_NAME + "=?";
+            selectionArgs = new String[] { getCallingPackage() };
+        }
+
         SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
-        queryBuilder.setStrict(true);
         String orderBy;
 
         switch (sUriMatcher.match(uri)) {
@@ -238,9 +256,44 @@ public class TvProvider extends ContentProvider {
             case MATCH_CHANNEL_ID:
                 queryBuilder.setTables(CHANNELS_TABLE);
                 queryBuilder.setProjectionMap(sChannelProjectionMap);
-                queryBuilder.appendWhere(Channels._ID + "=?");
-                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs,
-                        new String[] { Long.toString(ContentUris.parseId(uri)) });
+                selection = DatabaseUtils.concatenateWhere(selection, Channels._ID + "=?");
+                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                        uri.getLastPathSegment()
+                });
+                orderBy = DEFAULT_CHANNELS_SORT_ORDER;
+                break;
+            case MATCH_CHANNEL_ID_PROGRAM:
+                queryBuilder.setTables(PROGRAMS_TABLE);
+                queryBuilder.setProjectionMap(sProgramProjectionMap);
+                String paramStartTime = uri.getQueryParameter(TvContract.PARAM_START_TIME);
+                String paramEndTime = uri.getQueryParameter(TvContract.PARAM_END_TIME);
+                if (paramStartTime != null && paramEndTime != null) {
+                    String startTime = String.valueOf(Long.parseLong(paramStartTime));
+                    String endTime = String.valueOf(Long.parseLong(paramEndTime));
+                    selection = DatabaseUtils.concatenateWhere(selection,
+                            SELECTION_OVERLAPPED_PROGRAM);
+                    selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                            TvContract.getChannelId(uri), endTime, startTime
+                    });
+                } else {
+                    selection = DatabaseUtils.concatenateWhere(selection,
+                            Programs.CHANNEL_ID + "=?");
+                    selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                            TvContract.getChannelId(uri)
+                    });
+                }
+                orderBy = DEFAULT_PROGRAMS_SORT_ORDER;
+                break;
+            case MATCH_INPUT_PACKAGE_SERVICE_CHANNEL:
+                queryBuilder.setTables(CHANNELS_TABLE);
+                queryBuilder.setProjectionMap(sChannelProjectionMap);
+                boolean browsableOnly = uri.getBooleanQueryParameter(
+                        TvContract.PARAM_BROWSABLE_ONLY, true);
+                selection = DatabaseUtils.concatenateWhere(selection, SELECTION_CHANNEL_BY_INPUT
+                        + (browsableOnly ? " AND " + Channels.BROWSABLE + "=1" : ""));
+                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                        TvContract.getPackageName(uri), TvContract.getServiceName(uri)
+                });
                 orderBy = DEFAULT_CHANNELS_SORT_ORDER;
                 break;
             case MATCH_PROGRAM:
@@ -251,9 +304,10 @@ public class TvProvider extends ContentProvider {
             case MATCH_PROGRAM_ID:
                 queryBuilder.setTables(PROGRAMS_TABLE);
                 queryBuilder.setProjectionMap(sProgramProjectionMap);
-                queryBuilder.appendWhere(Programs._ID + "=?");
-                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs,
-                        new String[] { Long.toString(ContentUris.parseId(uri)) });
+                selection = DatabaseUtils.concatenateWhere(selection, Programs._ID + "=?");
+                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                        uri.getLastPathSegment()
+                });
                 orderBy = DEFAULT_PROGRAMS_SORT_ORDER;
                 break;
             case MATCH_WATCHED_PROGRAM:
@@ -264,9 +318,10 @@ public class TvProvider extends ContentProvider {
             case MATCH_WATCHED_PROGRAM_ID:
                 queryBuilder.setTables(WATCHED_PROGRAMS_TABLE);
                 queryBuilder.setProjectionMap(sWatchedProgramProjectionMap);
-                queryBuilder.appendWhere(WatchedPrograms._ID + "=?");
-                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs,
-                        new String[] { Long.toString(ContentUris.parseId(uri)) });
+                selection = DatabaseUtils.concatenateWhere(selection, WatchedPrograms._ID + "=?");
+                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                        uri.getLastPathSegment()
+                });
                 orderBy = DEFAULT_WATCHED_PROGRAMS_SORT_ORDER;
                 break;
             default:
@@ -276,13 +331,6 @@ public class TvProvider extends ContentProvider {
         // Use the default sort order only if no sort order is specified.
         if (!TextUtils.isEmpty(sortOrder)) {
             orderBy = sortOrder;
-        }
-
-        if (needsToLimitPackage(uri)) {
-            selection = DatabaseUtils.concatenateWhere(selection, BaseTvColumns.PACKAGE_NAME
-                    + "=?");
-            selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs,
-                    new String[] { getCallingPackage() });
         }
 
         // Get the database and run the query.
@@ -359,10 +407,11 @@ public class TvProvider extends ContentProvider {
     @Override
     public int delete(Uri uri, String selection, String[] selectionArgs) {
         if (needsToLimitPackage(uri)) {
-            selection = DatabaseUtils.concatenateWhere(selection, BaseTvColumns.PACKAGE_NAME
-                    + "=?");
-            selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs,
-                    new String[] { getCallingPackage() });
+            if (!TextUtils.isEmpty(selection)) {
+                throw new IllegalArgumentException("Selection not allowed for " + uri);
+            }
+            selection = BaseTvColumns.PACKAGE_NAME + "=?";
+            selectionArgs = new String[] { getCallingPackage() };
         }
 
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
@@ -374,8 +423,43 @@ public class TvProvider extends ContentProvider {
                 break;
             case MATCH_CHANNEL_ID:
                 selection = DatabaseUtils.concatenateWhere(selection, Channels._ID + "=?");
-                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs,
-                        new String[] { Long.toString(ContentUris.parseId(uri)) });
+                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                        uri.getLastPathSegment()
+                });
+                count = db.delete(CHANNELS_TABLE, selection, selectionArgs);
+                break;
+            case MATCH_CHANNEL_ID_PROGRAM:
+                String paramStartTime = uri.getQueryParameter(TvContract.PARAM_START_TIME);
+                String paramEndTime = uri.getQueryParameter(TvContract.PARAM_END_TIME);
+                if (paramStartTime != null && paramEndTime != null) {
+                    String startTime = String.valueOf(Long.parseLong(paramStartTime));
+                    String endTime = String.valueOf(Long.parseLong(paramEndTime));
+                    selection = DatabaseUtils.concatenateWhere(selection,
+                            SELECTION_OVERLAPPED_PROGRAM);
+                    selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                            TvContract.getChannelId(uri), endTime, startTime
+                    });
+                    count = db.delete(PROGRAMS_TABLE, selection, selectionArgs);
+                    if (count > 1) {
+                        Log.e(TAG, "Deleted more than one current program");
+                    }
+                } else {
+                    selection = DatabaseUtils.concatenateWhere(selection, Programs.CHANNEL_ID
+                            + "=?");
+                    selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                            TvContract.getChannelId(uri)
+                    });
+                    count = db.delete(PROGRAMS_TABLE, selection, selectionArgs);
+                }
+                break;
+            case MATCH_INPUT_PACKAGE_SERVICE_CHANNEL:
+                boolean browsableOnly = uri.getBooleanQueryParameter(
+                        TvContract.PARAM_BROWSABLE_ONLY, true);
+                selection = DatabaseUtils.concatenateWhere(selection, SELECTION_CHANNEL_BY_INPUT
+                        + (browsableOnly ? " AND " + Channels.BROWSABLE + "=1" : ""));
+                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                        TvContract.getPackageName(uri), TvContract.getServiceName(uri)
+                });
                 count = db.delete(CHANNELS_TABLE, selection, selectionArgs);
                 break;
             case MATCH_PROGRAM:
@@ -383,8 +467,9 @@ public class TvProvider extends ContentProvider {
                 break;
             case MATCH_PROGRAM_ID:
                 selection = DatabaseUtils.concatenateWhere(selection, Programs._ID + "=?");
-                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs,
-                        new String[] { Long.toString(ContentUris.parseId(uri)) });
+                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                        uri.getLastPathSegment()
+                });
                 count = db.delete(PROGRAMS_TABLE, selection, selectionArgs);
                 break;
             case MATCH_WATCHED_PROGRAM:
@@ -392,8 +477,9 @@ public class TvProvider extends ContentProvider {
                 break;
             case MATCH_WATCHED_PROGRAM_ID:
                 selection = DatabaseUtils.concatenateWhere(selection, WatchedPrograms._ID + "=?");
-                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs,
-                        new String[] { Long.toString(ContentUris.parseId(uri)) });
+                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                        uri.getLastPathSegment()
+                });
                 count = db.delete(WATCHED_PROGRAMS_TABLE, selection, selectionArgs);
                 break;
             default:
@@ -409,10 +495,11 @@ public class TvProvider extends ContentProvider {
     @Override
     public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
         if (needsToLimitPackage(uri)) {
-            selection = DatabaseUtils.concatenateWhere(selection, BaseTvColumns.PACKAGE_NAME
-                    + "=?");
-            selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs,
-                    new String[] { getCallingPackage() });
+            if (!TextUtils.isEmpty(selection)) {
+                throw new IllegalArgumentException("Selection not allowed for " + uri);
+            }
+            selection = BaseTvColumns.PACKAGE_NAME + "=?";
+            selectionArgs = new String[] { getCallingPackage() };
         }
 
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
@@ -424,8 +511,43 @@ public class TvProvider extends ContentProvider {
                 break;
             case MATCH_CHANNEL_ID:
                 selection = DatabaseUtils.concatenateWhere(selection, Channels._ID + "=?");
-                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs,
-                        new String[] { Long.toString(ContentUris.parseId(uri)) });
+                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                        uri.getLastPathSegment()
+                });
+                count = db.update(CHANNELS_TABLE, values, selection, selectionArgs);
+                break;
+            case MATCH_CHANNEL_ID_PROGRAM:
+                String paramStartTime = uri.getQueryParameter(TvContract.PARAM_START_TIME);
+                String paramEndTime = uri.getQueryParameter(TvContract.PARAM_END_TIME);
+                if (paramStartTime != null && paramEndTime != null) {
+                    String startTime = String.valueOf(Long.parseLong(paramStartTime));
+                    String endTime = String.valueOf(Long.parseLong(paramEndTime));
+                    selection = DatabaseUtils.concatenateWhere(selection,
+                            SELECTION_OVERLAPPED_PROGRAM);
+                    selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                            TvContract.getChannelId(uri), endTime, startTime
+                    });
+                    count = db.update(PROGRAMS_TABLE, values, selection, selectionArgs);
+                    if (count > 1) {
+                        Log.e(TAG, "Updated more than one current program");
+                    }
+                } else {
+                    selection = DatabaseUtils.concatenateWhere(selection, Programs.CHANNEL_ID
+                            + "=?");
+                    selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                            TvContract.getChannelId(uri)
+                    });
+                    count = db.update(PROGRAMS_TABLE, values, selection, selectionArgs);
+                }
+                break;
+            case MATCH_INPUT_PACKAGE_SERVICE_CHANNEL:
+                boolean browsableOnly = uri.getBooleanQueryParameter(
+                        TvContract.PARAM_BROWSABLE_ONLY, true);
+                selection = DatabaseUtils.concatenateWhere(selection, SELECTION_CHANNEL_BY_INPUT
+                        + (browsableOnly ? " AND " + Channels.BROWSABLE + "=1" : ""));
+                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                        TvContract.getPackageName(uri), TvContract.getServiceName(uri)
+                });
                 count = db.update(CHANNELS_TABLE, values, selection, selectionArgs);
                 break;
             case MATCH_PROGRAM:
@@ -433,8 +555,9 @@ public class TvProvider extends ContentProvider {
                 break;
             case MATCH_PROGRAM_ID:
                 selection = DatabaseUtils.concatenateWhere(selection, Programs._ID + "=?");
-                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs,
-                        new String[] { Long.toString(ContentUris.parseId(uri)) });
+                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                        uri.getLastPathSegment()
+                });
                 count = db.update(PROGRAMS_TABLE, values, selection, selectionArgs);
                 break;
             case MATCH_WATCHED_PROGRAM:
@@ -442,8 +565,9 @@ public class TvProvider extends ContentProvider {
                 break;
             case MATCH_WATCHED_PROGRAM_ID:
                 selection = DatabaseUtils.concatenateWhere(selection, WatchedPrograms._ID + "=?");
-                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs,
-                        new String[] { Long.toString(ContentUris.parseId(uri)) });
+                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                        uri.getLastPathSegment()
+                });
                 count = db.update(WATCHED_PROGRAMS_TABLE, values, selection, selectionArgs);
                 break;
             default:
@@ -460,7 +584,7 @@ public class TvProvider extends ContentProvider {
         // If an application is trying to access channel or program data, we need to ensure that the
         // access is limited to only those data entries that the application provided in the first
         // place. The only exception is when the application has the full data access. Note that the
-        // user’s watch log is treated separately with a special permission.
+        // user's watch log is treated separately with a special permission.
         int match = sUriMatcher.match(uri);
         return match != MATCH_WATCHED_PROGRAM && match != MATCH_WATCHED_PROGRAM_ID
                 && !callerHasFullEpgAccess();
