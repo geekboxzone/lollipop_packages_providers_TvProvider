@@ -58,11 +58,12 @@ public class TvProvider extends ContentProvider {
     private static final int MATCH_WATCHED_PROGRAM = 7;
     private static final int MATCH_WATCHED_PROGRAM_ID = 8;
 
-    private static final String SELECTION_OVERLAPPED_PROGRAM = Programs.CHANNEL_ID + "=? AND "
-            + Programs.START_TIME_UTC_MILLIS + "<? AND " + Programs.END_TIME_UTC_MILLIS + ">?";
+    private static final String SELECTION_OVERLAPPED_PROGRAM = Programs.COLUMN_CHANNEL_ID
+            + "=? AND " + Programs.COLUMN_START_TIME_UTC_MILLIS + "<? AND "
+            + Programs.COLUMN_END_TIME_UTC_MILLIS + ">?";
 
-    private static final String SELECTION_CHANNEL_BY_INPUT = Channels.PACKAGE_NAME + "=? AND "
-            + Channels.SERVICE_NAME + "=?";
+    private static final String SELECTION_CHANNEL_BY_INPUT = Channels.COLUMN_PACKAGE_NAME
+            + "=? AND " + Channels.COLUMN_SERVICE_NAME + "=?";
 
     private static HashMap<String, String> sChannelProjectionMap;
     private static HashMap<String, String> sProgramProjectionMap;
@@ -73,7 +74,8 @@ public class TvProvider extends ContentProvider {
         sUriMatcher.addURI(TvContract.AUTHORITY, "channel", MATCH_CHANNEL);
         sUriMatcher.addURI(TvContract.AUTHORITY, "channel/#", MATCH_CHANNEL_ID);
         sUriMatcher.addURI(TvContract.AUTHORITY, "channel/#/program", MATCH_CHANNEL_ID_PROGRAM);
-        sUriMatcher.addURI(TvContract.AUTHORITY, "input/*/*/channel", MATCH_INPUT_PACKAGE_SERVICE_CHANNEL);
+        sUriMatcher.addURI(TvContract.AUTHORITY, "input/*/*/channel",
+                MATCH_INPUT_PACKAGE_SERVICE_CHANNEL);
         sUriMatcher.addURI(TvContract.AUTHORITY, "program", MATCH_PROGRAM);
         sUriMatcher.addURI(TvContract.AUTHORITY, "program/#", MATCH_PROGRAM_ID);
         sUriMatcher.addURI(TvContract.AUTHORITY, "watched_program", MATCH_WATCHED_PROGRAM);
@@ -81,42 +83,49 @@ public class TvProvider extends ContentProvider {
 
         sChannelProjectionMap = new HashMap<String, String>();
         sChannelProjectionMap.put(Channels._ID, Channels._ID);
-        sChannelProjectionMap.put(Channels.PACKAGE_NAME, Channels.PACKAGE_NAME);
-        sChannelProjectionMap.put(Channels.SERVICE_NAME, Channels.SERVICE_NAME);
-        sChannelProjectionMap.put(Channels.TYPE, Channels.TYPE);
-        sChannelProjectionMap.put(Channels.TRANSPORT_STREAM_ID, Channels.TRANSPORT_STREAM_ID);
-        sChannelProjectionMap.put(Channels.DISPLAY_NUMBER, Channels.DISPLAY_NUMBER);
-        sChannelProjectionMap.put(Channels.DISPLAY_NAME, Channels.DISPLAY_NAME);
-        sChannelProjectionMap.put(Channels.DESCRIPTION, Channels.DESCRIPTION);
-        sChannelProjectionMap.put(Channels.BROWSABLE, Channels.BROWSABLE);
-        sChannelProjectionMap.put(Channels.DATA, Channels.DATA);
-        sChannelProjectionMap.put(Channels.VERSION_NUMBER, Channels.VERSION_NUMBER);
+        sChannelProjectionMap.put(Channels.COLUMN_PACKAGE_NAME, Channels.COLUMN_PACKAGE_NAME);
+        sChannelProjectionMap.put(Channels.COLUMN_SERVICE_NAME, Channels.COLUMN_SERVICE_NAME);
+        sChannelProjectionMap.put(Channels.COLUMN_TYPE, Channels.COLUMN_TYPE);
+        sChannelProjectionMap.put(Channels.COLUMN_TRANSPORT_STREAM_ID,
+                Channels.COLUMN_TRANSPORT_STREAM_ID);
+        sChannelProjectionMap.put(Channels.COLUMN_DISPLAY_NUMBER, Channels.COLUMN_DISPLAY_NUMBER);
+        sChannelProjectionMap.put(Channels.COLUMN_DISPLAY_NAME, Channels.COLUMN_DISPLAY_NAME);
+        sChannelProjectionMap.put(Channels.COLUMN_DESCRIPTION, Channels.COLUMN_DESCRIPTION);
+        sChannelProjectionMap.put(Channels.COLUMN_BROWSABLE, Channels.COLUMN_BROWSABLE);
+        sChannelProjectionMap.put(Channels.COLUMN_DATA, Channels.COLUMN_DATA);
+        sChannelProjectionMap.put(Channels.COLUMN_VERSION_NUMBER, Channels.COLUMN_VERSION_NUMBER);
 
         sProgramProjectionMap = new HashMap<String, String>();
         sProgramProjectionMap.put(Programs._ID, Programs._ID);
-        sProgramProjectionMap.put(Programs.PACKAGE_NAME, Programs.PACKAGE_NAME);
-        sProgramProjectionMap.put(Programs.CHANNEL_ID, Programs.CHANNEL_ID);
-        sProgramProjectionMap.put(Programs.TITLE, Programs.TITLE);
-        sProgramProjectionMap.put(Programs.START_TIME_UTC_MILLIS, Programs.START_TIME_UTC_MILLIS);
-        sProgramProjectionMap.put(Programs.END_TIME_UTC_MILLIS, Programs.END_TIME_UTC_MILLIS);
-        sProgramProjectionMap.put(Programs.DESCRIPTION, Programs.DESCRIPTION);
-        sProgramProjectionMap.put(Programs.LONG_DESCRIPTION, Programs.LONG_DESCRIPTION);
-        sProgramProjectionMap.put(Programs.DATA, Programs.DATA);
-        sProgramProjectionMap.put(Programs.VERSION_NUMBER, Programs.VERSION_NUMBER);
+        sProgramProjectionMap.put(Programs.COLUMN_PACKAGE_NAME, Programs.COLUMN_PACKAGE_NAME);
+        sProgramProjectionMap.put(Programs.COLUMN_CHANNEL_ID, Programs.COLUMN_CHANNEL_ID);
+        sProgramProjectionMap.put(Programs.COLUMN_TITLE, Programs.COLUMN_TITLE);
+        sProgramProjectionMap.put(Programs.COLUMN_START_TIME_UTC_MILLIS,
+                Programs.COLUMN_START_TIME_UTC_MILLIS);
+        sProgramProjectionMap.put(Programs.COLUMN_END_TIME_UTC_MILLIS,
+                Programs.COLUMN_END_TIME_UTC_MILLIS);
+        sProgramProjectionMap.put(Programs.COLUMN_DESCRIPTION, Programs.COLUMN_DESCRIPTION);
+        sProgramProjectionMap.put(Programs.COLUMN_LONG_DESCRIPTION,
+                Programs.COLUMN_LONG_DESCRIPTION);
+        sProgramProjectionMap.put(Programs.COLUMN_DATA, Programs.COLUMN_DATA);
+        sProgramProjectionMap.put(Programs.COLUMN_VERSION_NUMBER, Programs.COLUMN_VERSION_NUMBER);
 
         sWatchedProgramProjectionMap = new HashMap<String, String>();
         sWatchedProgramProjectionMap.put(WatchedPrograms._ID, WatchedPrograms._ID);
-        sWatchedProgramProjectionMap.put(WatchedPrograms.WATCH_START_TIME_UTC_MILLIS,
-                WatchedPrograms.WATCH_START_TIME_UTC_MILLIS);
-        sWatchedProgramProjectionMap.put(WatchedPrograms.WATCH_END_TIME_UTC_MILLIS,
-                WatchedPrograms.WATCH_END_TIME_UTC_MILLIS);
-        sWatchedProgramProjectionMap.put(WatchedPrograms.CHANNEL_ID, WatchedPrograms.CHANNEL_ID);
-        sWatchedProgramProjectionMap.put(WatchedPrograms.TITLE, WatchedPrograms.TITLE);
-        sWatchedProgramProjectionMap.put(WatchedPrograms.START_TIME_UTC_MILLIS,
-                WatchedPrograms.START_TIME_UTC_MILLIS);
-        sWatchedProgramProjectionMap.put(WatchedPrograms.END_TIME_UTC_MILLIS,
-                WatchedPrograms.END_TIME_UTC_MILLIS);
-        sWatchedProgramProjectionMap.put(WatchedPrograms.DESCRIPTION, WatchedPrograms.DESCRIPTION);
+        sWatchedProgramProjectionMap.put(WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS,
+                WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS);
+        sWatchedProgramProjectionMap.put(WatchedPrograms.COLUMN_WATCH_END_TIME_UTC_MILLIS,
+                WatchedPrograms.COLUMN_WATCH_END_TIME_UTC_MILLIS);
+        sWatchedProgramProjectionMap.put(WatchedPrograms.COLUMN_CHANNEL_ID,
+                WatchedPrograms.COLUMN_CHANNEL_ID);
+        sWatchedProgramProjectionMap.put(WatchedPrograms.COLUMN_TITLE,
+                WatchedPrograms.COLUMN_TITLE);
+        sWatchedProgramProjectionMap.put(WatchedPrograms.COLUMN_START_TIME_UTC_MILLIS,
+                WatchedPrograms.COLUMN_START_TIME_UTC_MILLIS);
+        sWatchedProgramProjectionMap.put(WatchedPrograms.COLUMN_END_TIME_UTC_MILLIS,
+                WatchedPrograms.COLUMN_END_TIME_UTC_MILLIS);
+        sWatchedProgramProjectionMap.put(WatchedPrograms.COLUMN_DESCRIPTION,
+                WatchedPrograms.COLUMN_DESCRIPTION);
     }
 
     private static final int DATABASE_VERSION = 1;
@@ -124,11 +133,12 @@ public class TvProvider extends ContentProvider {
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
     private static final String WATCHED_PROGRAMS_TABLE = "watched_programs";
-    private static final String DEFAULT_CHANNELS_SORT_ORDER = Channels.DISPLAY_NUMBER + " ASC";
-    private static final String DEFAULT_PROGRAMS_SORT_ORDER = Programs.START_TIME_UTC_MILLIS
+    private static final String DEFAULT_CHANNELS_SORT_ORDER = Channels.COLUMN_DISPLAY_NUMBER
+            + " ASC";
+    private static final String DEFAULT_PROGRAMS_SORT_ORDER = Programs.COLUMN_START_TIME_UTC_MILLIS
             + " ASC";
     private static final String DEFAULT_WATCHED_PROGRAMS_SORT_ORDER =
-            WatchedPrograms.WATCH_START_TIME_UTC_MILLIS + " DESC";
+            WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS + " DESC";
 
     private static final String PERMISSION_ALL_EPG_DATA = "android.permission.ALL_EPG_DATA";
 
@@ -145,41 +155,44 @@ public class TvProvider extends ContentProvider {
             // Set up the database schema.
             db.execSQL("CREATE TABLE " + CHANNELS_TABLE + " ("
                     + Channels._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    + Channels.PACKAGE_NAME + " TEXT NOT NULL,"
-                    + Channels.SERVICE_NAME + " TEXT NOT NULL,"
-                    + Channels.TYPE + " INTEGER NOT NULL DEFAULT 0,"
-                    + Channels.TRANSPORT_STREAM_ID + " INTEGER,"
-                    + Channels.DISPLAY_NUMBER + " TEXT,"
-                    + Channels.DISPLAY_NAME + " TEXT,"
-                    + Channels.DESCRIPTION + " TEXT,"
-                    + Channels.BROWSABLE + " INTEGER NOT NULL DEFAULT 1,"
-                    + Channels.DATA + " BLOB,"
-                    + Channels.VERSION_NUMBER + " INTEGER"
+                    + Channels.COLUMN_PACKAGE_NAME + " TEXT NOT NULL,"
+                    + Channels.COLUMN_SERVICE_NAME + " TEXT NOT NULL,"
+                    + Channels.COLUMN_TYPE + " INTEGER NOT NULL DEFAULT 0,"
+                    + Channels.COLUMN_SERVICE_TYPE + " INTEGER NOT NULL DEFAULT 1,"
+                    + Channels.COLUMN_ORIGINAL_NETWORK_ID + " INTEGER,"
+                    + Channels.COLUMN_TRANSPORT_STREAM_ID + " INTEGER,"
+                    + Channels.COLUMN_SERVICE_ID + " INTEGER,"
+                    + Channels.COLUMN_DISPLAY_NUMBER + " TEXT,"
+                    + Channels.COLUMN_DISPLAY_NAME + " TEXT,"
+                    + Channels.COLUMN_DESCRIPTION + " TEXT,"
+                    + Channels.COLUMN_BROWSABLE + " INTEGER NOT NULL DEFAULT 1,"
+                    + Channels.COLUMN_DATA + " BLOB,"
+                    + Channels.COLUMN_VERSION_NUMBER + " INTEGER"
                     + ");");
             db.execSQL("CREATE TABLE " + PROGRAMS_TABLE + " ("
                     + Programs._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    + Programs.PACKAGE_NAME + " TEXT NOT NULL,"
-                    + Programs.CHANNEL_ID + " INTEGER,"
-                    + Programs.TITLE + " TEXT,"
-                    + Programs.START_TIME_UTC_MILLIS + " INTEGER,"
-                    + Programs.END_TIME_UTC_MILLIS + " INTEGER,"
-                    + Programs.DESCRIPTION + " TEXT,"
-                    + Programs.LONG_DESCRIPTION + " TEXT,"
-                    + Programs.DATA + " BLOB,"
-                    + Programs.VERSION_NUMBER + " INTEGER,"
-                    + "FOREIGN KEY(" + Programs.CHANNEL_ID + ") REFERENCES "
+                    + Programs.COLUMN_PACKAGE_NAME + " TEXT NOT NULL,"
+                    + Programs.COLUMN_CHANNEL_ID + " INTEGER,"
+                    + Programs.COLUMN_TITLE + " TEXT,"
+                    + Programs.COLUMN_START_TIME_UTC_MILLIS + " INTEGER,"
+                    + Programs.COLUMN_END_TIME_UTC_MILLIS + " INTEGER,"
+                    + Programs.COLUMN_DESCRIPTION + " TEXT,"
+                    + Programs.COLUMN_LONG_DESCRIPTION + " TEXT,"
+                    + Programs.COLUMN_DATA + " BLOB,"
+                    + Programs.COLUMN_VERSION_NUMBER + " INTEGER,"
+                    + "FOREIGN KEY(" + Programs.COLUMN_CHANNEL_ID + ") REFERENCES "
                             + CHANNELS_TABLE + "(" + Channels._ID + ")"
                     + ");");
             db.execSQL("CREATE TABLE " + WATCHED_PROGRAMS_TABLE + " ("
                     + WatchedPrograms._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
-                    + WatchedPrograms.WATCH_START_TIME_UTC_MILLIS + " INTEGER,"
-                    + WatchedPrograms.WATCH_END_TIME_UTC_MILLIS + " INTEGER,"
-                    + WatchedPrograms.CHANNEL_ID + " INTEGER,"
-                    + WatchedPrograms.TITLE + " TEXT,"
-                    + WatchedPrograms.START_TIME_UTC_MILLIS + " INTEGER,"
-                    + WatchedPrograms.END_TIME_UTC_MILLIS + " INTEGER,"
-                    + WatchedPrograms.DESCRIPTION + " TEXT,"
-                    + "FOREIGN KEY(" + WatchedPrograms.CHANNEL_ID + ") REFERENCES "
+                    + WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS + " INTEGER,"
+                    + WatchedPrograms.COLUMN_WATCH_END_TIME_UTC_MILLIS + " INTEGER,"
+                    + WatchedPrograms.COLUMN_CHANNEL_ID + " INTEGER,"
+                    + WatchedPrograms.COLUMN_TITLE + " TEXT,"
+                    + WatchedPrograms.COLUMN_START_TIME_UTC_MILLIS + " INTEGER,"
+                    + WatchedPrograms.COLUMN_END_TIME_UTC_MILLIS + " INTEGER,"
+                    + WatchedPrograms.COLUMN_DESCRIPTION + " TEXT,"
+                    + "FOREIGN KEY(" + WatchedPrograms.COLUMN_CHANNEL_ID + ") REFERENCES "
                             + CHANNELS_TABLE + "(" + Channels._ID + ")"
                     + ");");
         }
@@ -240,7 +253,7 @@ public class TvProvider extends ContentProvider {
             if (!TextUtils.isEmpty(selection)) {
                 throw new IllegalArgumentException("Selection not allowed for " + uri);
             }
-            selection = BaseTvColumns.PACKAGE_NAME + "=?";
+            selection = BaseTvColumns.COLUMN_PACKAGE_NAME + "=?";
             selectionArgs = new String[] { getCallingPackage() };
         }
 
@@ -277,7 +290,7 @@ public class TvProvider extends ContentProvider {
                     });
                 } else {
                     selection = DatabaseUtils.concatenateWhere(selection,
-                            Programs.CHANNEL_ID + "=?");
+                            Programs.COLUMN_CHANNEL_ID + "=?");
                     selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
                             TvContract.getChannelId(uri)
                     });
@@ -290,7 +303,7 @@ public class TvProvider extends ContentProvider {
                 boolean browsableOnly = uri.getBooleanQueryParameter(
                         TvContract.PARAM_BROWSABLE_ONLY, true);
                 selection = DatabaseUtils.concatenateWhere(selection, SELECTION_CHANNEL_BY_INPUT
-                        + (browsableOnly ? " AND " + Channels.BROWSABLE + "=1" : ""));
+                        + (browsableOnly ? " AND " + Channels.COLUMN_BROWSABLE + "=1" : ""));
                 selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
                         TvContract.getPackageName(uri), TvContract.getServiceName(uri)
                 });
@@ -361,10 +374,10 @@ public class TvProvider extends ContentProvider {
     }
 
     private Uri insertChannel(Uri uri, ContentValues values) {
-        validateServiceName(values.getAsString(Channels.SERVICE_NAME));
+        validateServiceName(values.getAsString(Channels.COLUMN_SERVICE_NAME));
 
         // Mark the owner package of this channel.
-        values.put(Channels.PACKAGE_NAME, getCallingPackage());
+        values.put(Channels.COLUMN_PACKAGE_NAME, getCallingPackage());
 
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
         long rowId = db.insert(CHANNELS_TABLE, null, values);
@@ -379,7 +392,7 @@ public class TvProvider extends ContentProvider {
 
     private Uri insertProgram(Uri uri, ContentValues values) {
         // Mark the owner package of this program.
-        values.put(Programs.PACKAGE_NAME, getCallingPackage());
+        values.put(Programs.COLUMN_PACKAGE_NAME, getCallingPackage());
 
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
         long rowId = db.insert(PROGRAMS_TABLE, null, values);
@@ -410,7 +423,7 @@ public class TvProvider extends ContentProvider {
             if (!TextUtils.isEmpty(selection)) {
                 throw new IllegalArgumentException("Selection not allowed for " + uri);
             }
-            selection = BaseTvColumns.PACKAGE_NAME + "=?";
+            selection = BaseTvColumns.COLUMN_PACKAGE_NAME + "=?";
             selectionArgs = new String[] { getCallingPackage() };
         }
 
@@ -444,7 +457,7 @@ public class TvProvider extends ContentProvider {
                         Log.e(TAG, "Deleted more than one current program");
                     }
                 } else {
-                    selection = DatabaseUtils.concatenateWhere(selection, Programs.CHANNEL_ID
+                    selection = DatabaseUtils.concatenateWhere(selection, Programs.COLUMN_CHANNEL_ID
                             + "=?");
                     selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
                             TvContract.getChannelId(uri)
@@ -456,7 +469,7 @@ public class TvProvider extends ContentProvider {
                 boolean browsableOnly = uri.getBooleanQueryParameter(
                         TvContract.PARAM_BROWSABLE_ONLY, true);
                 selection = DatabaseUtils.concatenateWhere(selection, SELECTION_CHANNEL_BY_INPUT
-                        + (browsableOnly ? " AND " + Channels.BROWSABLE + "=1" : ""));
+                        + (browsableOnly ? " AND " + Channels.COLUMN_BROWSABLE + "=1" : ""));
                 selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
                         TvContract.getPackageName(uri), TvContract.getServiceName(uri)
                 });
@@ -498,7 +511,7 @@ public class TvProvider extends ContentProvider {
             if (!TextUtils.isEmpty(selection)) {
                 throw new IllegalArgumentException("Selection not allowed for " + uri);
             }
-            selection = BaseTvColumns.PACKAGE_NAME + "=?";
+            selection = BaseTvColumns.COLUMN_PACKAGE_NAME + "=?";
             selectionArgs = new String[] { getCallingPackage() };
         }
 
@@ -532,7 +545,7 @@ public class TvProvider extends ContentProvider {
                         Log.e(TAG, "Updated more than one current program");
                     }
                 } else {
-                    selection = DatabaseUtils.concatenateWhere(selection, Programs.CHANNEL_ID
+                    selection = DatabaseUtils.concatenateWhere(selection, Programs.COLUMN_CHANNEL_ID
                             + "=?");
                     selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
                             TvContract.getChannelId(uri)
@@ -544,7 +557,7 @@ public class TvProvider extends ContentProvider {
                 boolean browsableOnly = uri.getBooleanQueryParameter(
                         TvContract.PARAM_BROWSABLE_ONLY, true);
                 selection = DatabaseUtils.concatenateWhere(selection, SELECTION_CHANNEL_BY_INPUT
-                        + (browsableOnly ? " AND " + Channels.BROWSABLE + "=1" : ""));
+                        + (browsableOnly ? " AND " + Channels.COLUMN_BROWSABLE + "=1" : ""));
                 selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
                         TvContract.getPackageName(uri), TvContract.getServiceName(uri)
                 });
