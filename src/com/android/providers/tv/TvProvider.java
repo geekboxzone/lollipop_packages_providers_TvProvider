@@ -59,8 +59,8 @@ public class TvProvider extends ContentProvider {
     private static final int MATCH_WATCHED_PROGRAM_ID = 8;
 
     private static final String SELECTION_OVERLAPPED_PROGRAM = Programs.COLUMN_CHANNEL_ID
-            + "=? AND " + Programs.COLUMN_START_TIME_UTC_MILLIS + "<? AND "
-            + Programs.COLUMN_END_TIME_UTC_MILLIS + ">?";
+            + "=? AND " + Programs.COLUMN_START_TIME_UTC_MILLIS + "<=? AND "
+            + Programs.COLUMN_END_TIME_UTC_MILLIS + "=>?";
 
     private static final String SELECTION_CHANNEL_BY_INPUT = Channels.COLUMN_PACKAGE_NAME
             + "=? AND " + Channels.COLUMN_SERVICE_NAME + "=?";
