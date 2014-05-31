@@ -28,12 +28,12 @@ import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.database.sqlite.SQLiteQueryBuilder;
+import android.media.tv.TvContract;
+import android.media.tv.TvContract.BaseTvColumns;
+import android.media.tv.TvContract.Channels;
+import android.media.tv.TvContract.Programs;
+import android.media.tv.TvContract.WatchedPrograms;
 import android.net.Uri;
-import android.provider.TvContract;
-import android.provider.TvContract.BaseTvColumns;
-import android.provider.TvContract.Channels;
-import android.provider.TvContract.Programs;
-import android.provider.TvContract.WatchedPrograms;
 import android.text.TextUtils;
 import android.util.Log;
 
