@@ -48,7 +48,7 @@
     <application android:label="@string/app_label">
         <provider
             android:name="TvProvider"
-            android:authorities="com.android.tv"
+            android:authorities="android.media.tv"
             android:exported="true"
             android:syncable="true"
             android:readPermission="android.permission.READ_EPG_DATA"

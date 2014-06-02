@@ -41,7 +41,7 @@ import java.util.HashMap;
 
 /**
  * TV content provider. The contract between this provider and applications is defined in
- * {@link android.provider.TvContract}.
+ * {@link android.media.tv.TvContract}.
  */
 public class TvProvider extends ContentProvider {
     // STOPSHIP: Turn debugging off.
@@ -92,7 +92,8 @@ public class TvProvider extends ContentProvider {
         sChannelProjectionMap.put(Channels.COLUMN_DISPLAY_NAME, Channels.COLUMN_DISPLAY_NAME);
         sChannelProjectionMap.put(Channels.COLUMN_DESCRIPTION, Channels.COLUMN_DESCRIPTION);
         sChannelProjectionMap.put(Channels.COLUMN_BROWSABLE, Channels.COLUMN_BROWSABLE);
-        sChannelProjectionMap.put(Channels.COLUMN_DATA, Channels.COLUMN_DATA);
+        sChannelProjectionMap.put(Channels.COLUMN_INTERNAL_PROVIDER_DATA,
+                Channels.COLUMN_INTERNAL_PROVIDER_DATA);
         sChannelProjectionMap.put(Channels.COLUMN_VERSION_NUMBER, Channels.COLUMN_VERSION_NUMBER);
 
         sProgramProjectionMap = new HashMap<String, String>();
@@ -104,10 +105,12 @@ public class TvProvider extends ContentProvider {
                 Programs.COLUMN_START_TIME_UTC_MILLIS);
         sProgramProjectionMap.put(Programs.COLUMN_END_TIME_UTC_MILLIS,
                 Programs.COLUMN_END_TIME_UTC_MILLIS);
-        sProgramProjectionMap.put(Programs.COLUMN_DESCRIPTION, Programs.COLUMN_DESCRIPTION);
+        sProgramProjectionMap.put(Programs.COLUMN_SHORT_DESCRIPTION,
+                Programs.COLUMN_SHORT_DESCRIPTION);
         sProgramProjectionMap.put(Programs.COLUMN_LONG_DESCRIPTION,
                 Programs.COLUMN_LONG_DESCRIPTION);
-        sProgramProjectionMap.put(Programs.COLUMN_DATA, Programs.COLUMN_DATA);
+        sProgramProjectionMap.put(Programs.COLUMN_INTERNAL_PROVIDER_DATA,
+                Programs.COLUMN_INTERNAL_PROVIDER_DATA);
         sProgramProjectionMap.put(Programs.COLUMN_VERSION_NUMBER, Programs.COLUMN_VERSION_NUMBER);
 
         sWatchedProgramProjectionMap = new HashMap<String, String>();
@@ -128,7 +131,7 @@ public class TvProvider extends ContentProvider {
                 WatchedPrograms.COLUMN_DESCRIPTION);
     }
 
-    private static final int DATABASE_VERSION = 1;
+    private static final int DATABASE_VERSION = 2;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
@@ -166,7 +169,7 @@ public class TvProvider extends ContentProvider {
                     + Channels.COLUMN_DISPLAY_NAME + " TEXT,"
                     + Channels.COLUMN_DESCRIPTION + " TEXT,"
                     + Channels.COLUMN_BROWSABLE + " INTEGER NOT NULL DEFAULT 1,"
-                    + Channels.COLUMN_DATA + " BLOB,"
+                    + Channels.COLUMN_INTERNAL_PROVIDER_DATA + " BLOB,"
                     + Channels.COLUMN_VERSION_NUMBER + " INTEGER"
                     + ");");
             db.execSQL("CREATE TABLE " + PROGRAMS_TABLE + " ("
@@ -176,9 +179,9 @@ public class TvProvider extends ContentProvider {
                     + Programs.COLUMN_TITLE + " TEXT,"
                     + Programs.COLUMN_START_TIME_UTC_MILLIS + " INTEGER,"
                     + Programs.COLUMN_END_TIME_UTC_MILLIS + " INTEGER,"
-                    + Programs.COLUMN_DESCRIPTION + " TEXT,"
+                    + Programs.COLUMN_SHORT_DESCRIPTION + " TEXT,"
                     + Programs.COLUMN_LONG_DESCRIPTION + " TEXT,"
-                    + Programs.COLUMN_DATA + " BLOB,"
+                    + Programs.COLUMN_INTERNAL_PROVIDER_DATA + " BLOB,"
                     + Programs.COLUMN_VERSION_NUMBER + " INTEGER,"
                     + "FOREIGN KEY(" + Programs.COLUMN_CHANNEL_ID + ") REFERENCES "
                             + CHANNELS_TABLE + "(" + Channels._ID + ")"
