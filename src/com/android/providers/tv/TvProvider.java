@@ -28,15 +28,26 @@ import android.database.SQLException;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.database.sqlite.SQLiteQueryBuilder;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.media.tv.TvContract;
 import android.media.tv.TvContract.BaseTvColumns;
 import android.media.tv.TvContract.Channels;
 import android.media.tv.TvContract.Programs;
 import android.media.tv.TvContract.WatchedPrograms;
 import android.net.Uri;
+import android.os.AsyncTask;
+import android.os.ParcelFileDescriptor;
+import android.os.ParcelFileDescriptor.AutoCloseInputStream;
 import android.text.TextUtils;
 import android.util.Log;
 
+import libcore.io.IoUtils;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.HashMap;
 
 /**
@@ -51,12 +62,13 @@ public class TvProvider extends ContentProvider {
     private static final UriMatcher sUriMatcher;
     private static final int MATCH_CHANNEL = 1;
     private static final int MATCH_CHANNEL_ID = 2;
-    private static final int MATCH_CHANNEL_ID_PROGRAM = 3;
-    private static final int MATCH_INPUT_PACKAGE_SERVICE_CHANNEL = 4;
-    private static final int MATCH_PROGRAM = 5;
-    private static final int MATCH_PROGRAM_ID = 6;
-    private static final int MATCH_WATCHED_PROGRAM = 7;
-    private static final int MATCH_WATCHED_PROGRAM_ID = 8;
+    private static final int MATCH_CHANNEL_ID_LOGO = 3;
+    private static final int MATCH_CHANNEL_ID_PROGRAM = 4;
+    private static final int MATCH_INPUT_PACKAGE_SERVICE_CHANNEL = 5;
+    private static final int MATCH_PROGRAM = 6;
+    private static final int MATCH_PROGRAM_ID = 7;
+    private static final int MATCH_WATCHED_PROGRAM = 8;
+    private static final int MATCH_WATCHED_PROGRAM_ID = 9;
 
     private static final String SELECTION_OVERLAPPED_PROGRAM = Programs.COLUMN_CHANNEL_ID
             + "=? AND " + Programs.COLUMN_START_TIME_UTC_MILLIS + "<=? AND "
@@ -64,6 +76,9 @@ public class TvProvider extends ContentProvider {
 
     private static final String SELECTION_CHANNEL_BY_INPUT = Channels.COLUMN_PACKAGE_NAME
             + "=? AND " + Channels.COLUMN_SERVICE_NAME + "=?";
+
+    private static final String LOGO_DIRECTORY = "logo";
+    private static final int MAX_LOGO_IMAGE_SIZE = 256;
 
     private static HashMap<String, String> sChannelProjectionMap;
     private static HashMap<String, String> sProgramProjectionMap;
@@ -73,6 +88,7 @@ public class TvProvider extends ContentProvider {
         sUriMatcher = new UriMatcher(UriMatcher.NO_MATCH);
         sUriMatcher.addURI(TvContract.AUTHORITY, "channel", MATCH_CHANNEL);
         sUriMatcher.addURI(TvContract.AUTHORITY, "channel/#", MATCH_CHANNEL_ID);
+        sUriMatcher.addURI(TvContract.AUTHORITY, "channel/#/logo", MATCH_CHANNEL_ID_LOGO);
         sUriMatcher.addURI(TvContract.AUTHORITY, "channel/#/program", MATCH_CHANNEL_ID_PROGRAM);
         sUriMatcher.addURI(TvContract.AUTHORITY, "input/*/*/channel",
                 MATCH_INPUT_PACKAGE_SERVICE_CHANNEL);
@@ -131,7 +147,7 @@ public class TvProvider extends ContentProvider {
                 WatchedPrograms.COLUMN_DESCRIPTION);
     }
 
-    private static final int DATABASE_VERSION = 2;
+    private static final int DATABASE_VERSION = 3;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
@@ -181,6 +197,8 @@ public class TvProvider extends ContentProvider {
                     + Programs.COLUMN_END_TIME_UTC_MILLIS + " INTEGER,"
                     + Programs.COLUMN_SHORT_DESCRIPTION + " TEXT,"
                     + Programs.COLUMN_LONG_DESCRIPTION + " TEXT,"
+                    + Programs.COLUMN_POSTER_ART_URI + " TEXT,"
+                    + Programs.COLUMN_THUMBNAIL_URI + " TEXT,"
                     + Programs.COLUMN_INTERNAL_PROVIDER_DATA + " BLOB,"
                     + Programs.COLUMN_VERSION_NUMBER + " INTEGER,"
                     + "FOREIGN KEY(" + Programs.COLUMN_CHANNEL_ID + ") REFERENCES "
@@ -215,6 +233,7 @@ public class TvProvider extends ContentProvider {
     }
 
     private DatabaseHelper mOpenHelper;
+    private File mLogoPath;
 
     @Override
     public boolean onCreate() {
@@ -222,6 +241,7 @@ public class TvProvider extends ContentProvider {
           Log.d(TAG, "Creating TvProvider");
         }
         mOpenHelper = new DatabaseHelper(getContext());
+        mLogoPath = new File(getContext().getFilesDir(), LOGO_DIRECTORY);
         return true;
     }
 
@@ -232,6 +252,8 @@ public class TvProvider extends ContentProvider {
                 return Channels.CONTENT_TYPE;
             case MATCH_CHANNEL_ID:
                 return Channels.CONTENT_ITEM_TYPE;
+            case MATCH_CHANNEL_ID_LOGO:
+                return "image/png";
             case MATCH_CHANNEL_ID_PROGRAM:
                 return Programs.CONTENT_TYPE;
             case MATCH_INPUT_PACKAGE_SERVICE_CHANNEL:
@@ -618,6 +640,124 @@ public class TvProvider extends ContentProvider {
             getContext().getPackageManager().getServiceInfo(componentName, 0);
         } catch (PackageManager.NameNotFoundException e) {
             throw new IllegalArgumentException("Invalid service name: " + serviceName);
+        }
+    }
+
+    @Override
+    public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
+        switch (sUriMatcher.match(uri)) {
+            case MATCH_CHANNEL_ID_LOGO:
+                return openLogoFile(uri, mode);
+            default:
+                throw new FileNotFoundException(uri.toString());
+        }
+    }
+
+    private ParcelFileDescriptor openLogoFile(Uri uri, String mode) throws FileNotFoundException {
+        long channelId = Long.parseLong(uri.getPathSegments().get(1));
+        if (mode.equals("r")) {
+            File file = getLogoFile(channelId);
+            if (!file.exists()) {
+                throw new FileNotFoundException("No logo found for channel ID " + channelId);
+            }
+            return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY);
+        } else {
+            if (!callerOwnsChannelId(channelId)) {
+                throw new FileNotFoundException(uri.toString());
+            }
+            try {
+                ParcelFileDescriptor[] pipeFds = ParcelFileDescriptor.createPipe();
+                PipeMonitor pipeMonitor = new PipeMonitor(channelId, pipeFds[0]);
+                pipeMonitor.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+                return pipeFds[1];
+            } catch (IOException ioe) {
+                FileNotFoundException fne = new FileNotFoundException(
+                        "Could not create temp logo file for channel ID" + channelId);
+                fne.initCause(ioe);
+                throw fne;
+            }
+        }
+    }
+
+    private File getLogoFile(long channelId) {
+        return new File(mLogoPath, String.valueOf(channelId));
+    }
+
+    private boolean callerOwnsChannelId(long channelId) {
+        SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
+        queryBuilder.setTables(CHANNELS_TABLE);
+        queryBuilder.setProjectionMap(sChannelProjectionMap);
+
+        String[] projection = new String[] { Channels._ID };
+        String selection = Channels._ID + "=? AND " + Channels.COLUMN_PACKAGE_NAME + "=?";
+        String[] selectionArgs = new String[] { String.valueOf(channelId), getCallingPackage() };
+
+        SQLiteDatabase db = mOpenHelper.getReadableDatabase();
+        Cursor cursor = queryBuilder.query(
+                db, projection, selection, selectionArgs, null, null, null);
+        try {
+            return cursor.getCount() == 1;
+        } finally {
+            cursor.close();
+        }
+    }
+
+    private class PipeMonitor extends AsyncTask<Void, Void, Void> {
+        private final long mChannelId;
+        private final ParcelFileDescriptor mPfd;
+
+        private PipeMonitor(long channelId, ParcelFileDescriptor pfd) {
+            mChannelId = channelId;
+            mPfd = pfd;
+        }
+
+        @Override
+        protected Void doInBackground(Void... params) {
+            AutoCloseInputStream is = new AutoCloseInputStream(mPfd);
+            File tempFile = null;
+            FileOutputStream fos = null;
+            try {
+                Bitmap bitmap = BitmapFactory.decodeStream(is);
+                if (bitmap == null) {
+                    Log.e(TAG, "Failed to decode logo image for channel ID " + mChannelId);
+                    return null;
+                }
+
+                float scaleFactor = Math.min(1f, ((float) MAX_LOGO_IMAGE_SIZE) /
+                        Math.max(bitmap.getWidth(), bitmap.getHeight()));
+                if (scaleFactor < 1f) {
+                    bitmap = Bitmap.createScaledBitmap(bitmap,
+                            (int) (bitmap.getWidth() * scaleFactor),
+                            (int) (bitmap.getHeight() * scaleFactor), false);
+                }
+
+                if (!mLogoPath.exists()) {
+                    if (!mLogoPath.mkdirs()) {
+                        Log.e(TAG, "Failed to create logo storage directory " + mLogoPath);
+                        return null;
+                    }
+                }
+                tempFile = File.createTempFile("img", null, mLogoPath);
+                fos = new FileOutputStream(tempFile);
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, fos);
+
+                if (!tempFile.renameTo(getLogoFile(mChannelId))) {
+                    Log.e(TAG, "Failed to rename logo for channel ID " + mChannelId);
+                    return null;
+                }
+                tempFile = null;
+                Uri channelUri = TvContract.buildChannelUri(mChannelId);
+                getContext().getContentResolver().notifyChange(channelUri, null);
+            } catch (IOException ioe) {
+                Log.e(TAG, "Failed to write logo for channel ID " + mChannelId, ioe);
+            } finally {
+                IoUtils.closeQuietly(fos);
+                IoUtils.closeQuietly(is);
+                if (tempFile != null) {
+                    tempFile.delete();
+                }
+            }
+            return null;
         }
     }
 }
