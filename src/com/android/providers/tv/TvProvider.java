@@ -303,6 +303,11 @@ public class TvProvider extends ContentProvider {
             case MATCH_CHANNEL_ID_PROGRAM:
                 queryBuilder.setTables(PROGRAMS_TABLE);
                 queryBuilder.setProjectionMap(sProgramProjectionMap);
+                selection = DatabaseUtils.concatenateWhere(selection,
+                        Programs.COLUMN_CHANNEL_ID + "=?");
+                selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
+                        TvContract.getChannelId(uri)
+                });
                 String paramStartTime = uri.getQueryParameter(TvContract.PARAM_START_TIME);
                 String paramEndTime = uri.getQueryParameter(TvContract.PARAM_END_TIME);
                 if (paramStartTime != null && paramEndTime != null) {
@@ -312,12 +317,6 @@ public class TvProvider extends ContentProvider {
                             SELECTION_OVERLAPPED_PROGRAM);
                     selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
                             TvContract.getChannelId(uri), endTime, startTime
-                    });
-                } else {
-                    selection = DatabaseUtils.concatenateWhere(selection,
-                            Programs.COLUMN_CHANNEL_ID + "=?");
-                    selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
-                            TvContract.getChannelId(uri)
                     });
                 }
                 orderBy = DEFAULT_PROGRAMS_SORT_ORDER;
