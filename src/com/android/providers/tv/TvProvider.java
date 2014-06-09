@@ -126,6 +126,10 @@ public class TvProvider extends ContentProvider {
                 Programs.COLUMN_SHORT_DESCRIPTION);
         sProgramProjectionMap.put(Programs.COLUMN_LONG_DESCRIPTION,
                 Programs.COLUMN_LONG_DESCRIPTION);
+        sProgramProjectionMap.put(Programs.COLUMN_POSTER_ART_URI,
+                Programs.COLUMN_POSTER_ART_URI);
+        sProgramProjectionMap.put(Programs.COLUMN_THUMBNAIL_URI,
+                Programs.COLUMN_THUMBNAIL_URI);
         sProgramProjectionMap.put(Programs.COLUMN_INTERNAL_PROVIDER_DATA,
                 Programs.COLUMN_INTERNAL_PROVIDER_DATA);
         sProgramProjectionMap.put(Programs.COLUMN_VERSION_NUMBER, Programs.COLUMN_VERSION_NUMBER);
