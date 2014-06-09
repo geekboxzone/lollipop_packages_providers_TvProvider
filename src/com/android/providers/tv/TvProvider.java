@@ -108,6 +108,7 @@ public class TvProvider extends ContentProvider {
         sChannelProjectionMap.put(Channels.COLUMN_DISPLAY_NAME, Channels.COLUMN_DISPLAY_NAME);
         sChannelProjectionMap.put(Channels.COLUMN_DESCRIPTION, Channels.COLUMN_DESCRIPTION);
         sChannelProjectionMap.put(Channels.COLUMN_BROWSABLE, Channels.COLUMN_BROWSABLE);
+        sChannelProjectionMap.put(Channels.COLUMN_SEARCHABLE, Channels.COLUMN_SEARCHABLE);
         sChannelProjectionMap.put(Channels.COLUMN_INTERNAL_PROVIDER_DATA,
                 Channels.COLUMN_INTERNAL_PROVIDER_DATA);
         sChannelProjectionMap.put(Channels.COLUMN_VERSION_NUMBER, Channels.COLUMN_VERSION_NUMBER);
@@ -147,7 +148,7 @@ public class TvProvider extends ContentProvider {
                 WatchedPrograms.COLUMN_DESCRIPTION);
     }
 
-    private static final int DATABASE_VERSION = 3;
+    private static final int DATABASE_VERSION = 4;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
@@ -185,6 +186,7 @@ public class TvProvider extends ContentProvider {
                     + Channels.COLUMN_DISPLAY_NAME + " TEXT,"
                     + Channels.COLUMN_DESCRIPTION + " TEXT,"
                     + Channels.COLUMN_BROWSABLE + " INTEGER NOT NULL DEFAULT 1,"
+                    + Channels.COLUMN_SEARCHABLE + " INTEGER NOT NULL DEFAULT 1,"
                     + Channels.COLUMN_INTERNAL_PROVIDER_DATA + " BLOB,"
                     + Channels.COLUMN_VERSION_NUMBER + " INTEGER"
                     + ");");
