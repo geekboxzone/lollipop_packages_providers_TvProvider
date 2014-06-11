@@ -80,6 +80,9 @@ public class TvProvider extends ContentProvider {
     private static final String LOGO_DIRECTORY = "logo";
     private static final int MAX_LOGO_IMAGE_SIZE = 256;
 
+    // STOPSHIP: Put this into the contract class.
+    private static final String Programs_COLUMN_VIDEO_RESOLUTION = "video_resolution";
+
     private static HashMap<String, String> sChannelProjectionMap;
     private static HashMap<String, String> sProgramProjectionMap;
     private static HashMap<String, String> sWatchedProgramProjectionMap;
@@ -126,6 +129,8 @@ public class TvProvider extends ContentProvider {
                 Programs.COLUMN_SHORT_DESCRIPTION);
         sProgramProjectionMap.put(Programs.COLUMN_LONG_DESCRIPTION,
                 Programs.COLUMN_LONG_DESCRIPTION);
+        sProgramProjectionMap.put(Programs_COLUMN_VIDEO_RESOLUTION,
+                Programs_COLUMN_VIDEO_RESOLUTION);
         sProgramProjectionMap.put(Programs.COLUMN_POSTER_ART_URI,
                 Programs.COLUMN_POSTER_ART_URI);
         sProgramProjectionMap.put(Programs.COLUMN_THUMBNAIL_URI,
@@ -152,7 +157,7 @@ public class TvProvider extends ContentProvider {
                 WatchedPrograms.COLUMN_DESCRIPTION);
     }
 
-    private static final int DATABASE_VERSION = 4;
+    private static final int DATABASE_VERSION = 5;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
@@ -203,6 +208,7 @@ public class TvProvider extends ContentProvider {
                     + Programs.COLUMN_END_TIME_UTC_MILLIS + " INTEGER,"
                     + Programs.COLUMN_SHORT_DESCRIPTION + " TEXT,"
                     + Programs.COLUMN_LONG_DESCRIPTION + " TEXT,"
+                    + Programs_COLUMN_VIDEO_RESOLUTION + " TEXT,"
                     + Programs.COLUMN_POSTER_ART_URI + " TEXT,"
                     + Programs.COLUMN_THUMBNAIL_URI + " TEXT,"
                     + Programs.COLUMN_INTERNAL_PROVIDER_DATA + " BLOB,"
