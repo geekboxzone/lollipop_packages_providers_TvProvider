@@ -667,6 +667,9 @@ public class TvProvider extends ContentProvider {
     private ParcelFileDescriptor openLogoFile(Uri uri, String mode) throws FileNotFoundException {
         long channelId = Long.parseLong(uri.getPathSegments().get(1));
         if (mode.equals("r")) {
+            if (!callerOwnsChannelId(channelId) && !callerHasFullEpgAccess()) {
+                throw new FileNotFoundException(uri.toString());
+            }
             File file = getLogoFile(channelId);
             if (!file.exists()) {
                 throw new FileNotFoundException("No logo found for channel ID " + channelId);
