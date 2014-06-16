@@ -157,7 +157,7 @@ public class TvProvider extends ContentProvider {
                 WatchedPrograms.COLUMN_DESCRIPTION);
     }
 
-    private static final int DATABASE_VERSION = 5;
+    private static final int DATABASE_VERSION = 6;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
@@ -174,6 +174,11 @@ public class TvProvider extends ContentProvider {
     private static class DatabaseHelper extends SQLiteOpenHelper {
         DatabaseHelper(Context context) {
             super(context, DATABASE_NAME, null, DATABASE_VERSION);
+        }
+
+        @Override
+        public void onConfigure(SQLiteDatabase db) {
+            db.setForeignKeyConstraintsEnabled(true);
         }
 
         @Override
@@ -215,6 +220,7 @@ public class TvProvider extends ContentProvider {
                     + Programs.COLUMN_VERSION_NUMBER + " INTEGER,"
                     + "FOREIGN KEY(" + Programs.COLUMN_CHANNEL_ID + ") REFERENCES "
                             + CHANNELS_TABLE + "(" + Channels._ID + ")"
+                    + " ON UPDATE CASCADE ON DELETE CASCADE"
                     + ");");
             db.execSQL("CREATE TABLE " + WATCHED_PROGRAMS_TABLE + " ("
                     + WatchedPrograms._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -227,6 +233,7 @@ public class TvProvider extends ContentProvider {
                     + WatchedPrograms.COLUMN_DESCRIPTION + " TEXT,"
                     + "FOREIGN KEY(" + WatchedPrograms.COLUMN_CHANNEL_ID + ") REFERENCES "
                             + CHANNELS_TABLE + "(" + Channels._ID + ")"
+                    + " ON UPDATE CASCADE ON DELETE CASCADE"
                     + ");");
         }
 
