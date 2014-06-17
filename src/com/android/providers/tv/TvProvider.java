@@ -18,8 +18,11 @@ package com.android.providers.tv;
 
 import android.content.ComponentName;
 import android.content.ContentProvider;
+import android.content.ContentProviderOperation;
+import android.content.ContentProviderResult;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.OperationApplicationException;
 import android.content.UriMatcher;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
@@ -42,13 +45,17 @@ import android.os.ParcelFileDescriptor.AutoCloseInputStream;
 import android.text.TextUtils;
 import android.util.Log;
 
+import com.google.android.collect.Sets;
+
 import libcore.io.IoUtils;
 
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Set;
 
 /**
  * TV content provider. The contract between this provider and applications is defined in
@@ -426,7 +433,7 @@ public class TvProvider extends ContentProvider {
         long rowId = db.insert(CHANNELS_TABLE, null, values);
         if (rowId > 0) {
             Uri channelUri = TvContract.buildChannelUri(rowId);
-            getContext().getContentResolver().notifyChange(channelUri, null);
+            notifyChange(channelUri);
             return channelUri;
         }
 
@@ -441,7 +448,7 @@ public class TvProvider extends ContentProvider {
         long rowId = db.insert(PROGRAMS_TABLE, null, values);
         if (rowId > 0) {
             Uri programUri = TvContract.buildProgramUri(rowId);
-            getContext().getContentResolver().notifyChange(programUri, null);
+            notifyChange(programUri);
             return programUri;
         }
 
@@ -453,7 +460,7 @@ public class TvProvider extends ContentProvider {
         long rowId = db.insert(WATCHED_PROGRAMS_TABLE, null, values);
         if (rowId > 0) {
             Uri watchedProgramUri = TvContract.buildWatchedProgramUri(rowId);
-            getContext().getContentResolver().notifyChange(watchedProgramUri, null);
+            notifyChange(watchedProgramUri);
             return watchedProgramUri;
         }
 
@@ -543,7 +550,7 @@ public class TvProvider extends ContentProvider {
         }
 
         if (count > 0) {
-            getContext().getContentResolver().notifyChange(uri, null);
+            notifyChange(uri);
         }
         return count;
     }
@@ -631,9 +638,52 @@ public class TvProvider extends ContentProvider {
         }
 
         if (count > 0) {
-            getContext().getContentResolver().notifyChange(uri, null);
+            notifyChange(uri);
         }
         return count;
+    }
+
+    // We might have more than one thread trying to make its way through applyBatch() so the
+    // notification coalescing needs to be thread-local to work correctly.
+    private final ThreadLocal<Set<Uri>> mTLBatchNotifications =
+            new ThreadLocal<Set<Uri>>();
+
+    private Set<Uri> getBatchNotificationsSet() {
+        return mTLBatchNotifications.get();
+    }
+
+    private void setBatchNotificationsSet(Set<Uri> batchNotifications) {
+        mTLBatchNotifications.set(batchNotifications);
+    }
+
+    @Override
+    public ContentProviderResult[] applyBatch(ArrayList<ContentProviderOperation> operations)
+            throws OperationApplicationException {
+        setBatchNotificationsSet(Sets.<Uri>newHashSet());
+        Context context = getContext();
+        SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            ContentProviderResult[] results = super.applyBatch(operations);
+            db.setTransactionSuccessful();
+            return results;
+        } finally {
+            db.endTransaction();
+            final Set<Uri> notifications = getBatchNotificationsSet();
+            setBatchNotificationsSet(null);
+            for (final Uri uri : notifications) {
+                context.getContentResolver().notifyChange(uri, null);
+            }
+        }
+    }
+
+    private void notifyChange(Uri uri) {
+        final Set<Uri> batchNotifications = getBatchNotificationsSet();
+        if (batchNotifications != null) {
+            batchNotifications.add(uri);
+        } else {
+            getContext().getContentResolver().notifyChange(uri, null);
+        }
     }
 
     private boolean needsToLimitPackage(Uri uri) {
@@ -768,7 +818,7 @@ public class TvProvider extends ContentProvider {
                 }
                 tempFile = null;
                 Uri channelUri = TvContract.buildChannelUri(mChannelId);
-                getContext().getContentResolver().notifyChange(channelUri, null);
+                notifyChange(channelUri);
             } catch (IOException ioe) {
                 Log.e(TAG, "Failed to write logo for channel ID " + mChannelId, ioe);
             } finally {
