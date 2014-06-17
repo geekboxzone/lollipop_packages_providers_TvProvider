@@ -37,6 +37,7 @@ import android.media.tv.TvContract;
 import android.media.tv.TvContract.BaseTvColumns;
 import android.media.tv.TvContract.Channels;
 import android.media.tv.TvContract.Programs;
+import android.media.tv.TvContract.Programs.Genres;
 import android.media.tv.TvContract.WatchedPrograms;
 import android.net.Uri;
 import android.os.AsyncTask;
@@ -66,6 +67,22 @@ public class TvProvider extends ContentProvider {
     private static final boolean DEBUG = true;
     private static final String TAG = "TvProvider";
 
+    private static final int DATABASE_VERSION = 8;
+    private static final String DATABASE_NAME = "tv.db";
+    private static final String CHANNELS_TABLE = "channels";
+    private static final String PROGRAMS_TABLE = "programs";
+    private static final String WATCHED_PROGRAMS_TABLE = "watched_programs";
+    private static final String DEFAULT_CHANNELS_SORT_ORDER = Channels.COLUMN_DISPLAY_NUMBER
+            + " ASC";
+    private static final String DEFAULT_PROGRAMS_SORT_ORDER = Programs.COLUMN_START_TIME_UTC_MILLIS
+            + " ASC";
+    private static final String DEFAULT_WATCHED_PROGRAMS_SORT_ORDER =
+            WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS + " DESC";
+    private static final String CHANNELS_TABLE_INNER_JOIN_PROGRAMS_TABLE = CHANNELS_TABLE
+            + " INNER JOIN " + PROGRAMS_TABLE
+            + " ON (" + CHANNELS_TABLE + "." + Channels._ID + " = "
+            + PROGRAMS_TABLE + "." + Programs.COLUMN_CHANNEL_ID + ")";
+
     private static final UriMatcher sUriMatcher;
     private static final int MATCH_CHANNEL = 1;
     private static final int MATCH_CHANNEL_ID = 2;
@@ -81,8 +98,14 @@ public class TvProvider extends ContentProvider {
             + "=? AND " + Programs.COLUMN_START_TIME_UTC_MILLIS + "<=? AND "
             + Programs.COLUMN_END_TIME_UTC_MILLIS + ">=?";
 
-    private static final String SELECTION_CHANNEL_BY_INPUT = Channels.COLUMN_PACKAGE_NAME
-            + "=? AND " + Channels.COLUMN_SERVICE_NAME + "=?";
+    private static final String SELECTION_CHANNEL_BY_INPUT = CHANNELS_TABLE + "."
+            + Channels.COLUMN_PACKAGE_NAME + "=? AND " + CHANNELS_TABLE + "."
+            + Channels.COLUMN_SERVICE_NAME + "=?";
+
+    private static final String SELECTION_PROGRAM_BY_CANONICAL_GENRE = "LIKE(?, "
+            + Programs.COLUMN_CANONICAL_GENRE + ") AND "
+            + Programs.COLUMN_START_TIME_UTC_MILLIS + "<=? AND "
+            + Programs.COLUMN_END_TIME_UTC_MILLIS + ">=?";
 
     private static final String CHANNELS_COLUMN_LOGO = "logo";
     private static final int MAX_LOGO_IMAGE_SIZE = 256;
@@ -108,20 +131,29 @@ public class TvProvider extends ContentProvider {
         sUriMatcher.addURI(TvContract.AUTHORITY, "watched_program/#", MATCH_WATCHED_PROGRAM_ID);
 
         sChannelProjectionMap = new HashMap<String, String>();
-        sChannelProjectionMap.put(Channels._ID, Channels._ID);
-        sChannelProjectionMap.put(Channels.COLUMN_PACKAGE_NAME, Channels.COLUMN_PACKAGE_NAME);
-        sChannelProjectionMap.put(Channels.COLUMN_SERVICE_NAME, Channels.COLUMN_SERVICE_NAME);
-        sChannelProjectionMap.put(Channels.COLUMN_TYPE, Channels.COLUMN_TYPE);
+        sChannelProjectionMap.put(Channels._ID, CHANNELS_TABLE + "." + Channels._ID);
+        sChannelProjectionMap.put(Channels.COLUMN_PACKAGE_NAME,
+                CHANNELS_TABLE + "." + Channels.COLUMN_PACKAGE_NAME);
+        sChannelProjectionMap.put(Channels.COLUMN_SERVICE_NAME,
+                CHANNELS_TABLE + "." + Channels.COLUMN_SERVICE_NAME);
+        sChannelProjectionMap.put(Channels.COLUMN_TYPE,
+                CHANNELS_TABLE + "." + Channels.COLUMN_TYPE);
         sChannelProjectionMap.put(Channels.COLUMN_TRANSPORT_STREAM_ID,
-                Channels.COLUMN_TRANSPORT_STREAM_ID);
-        sChannelProjectionMap.put(Channels.COLUMN_DISPLAY_NUMBER, Channels.COLUMN_DISPLAY_NUMBER);
-        sChannelProjectionMap.put(Channels.COLUMN_DISPLAY_NAME, Channels.COLUMN_DISPLAY_NAME);
-        sChannelProjectionMap.put(Channels.COLUMN_DESCRIPTION, Channels.COLUMN_DESCRIPTION);
-        sChannelProjectionMap.put(Channels.COLUMN_BROWSABLE, Channels.COLUMN_BROWSABLE);
-        sChannelProjectionMap.put(Channels.COLUMN_SEARCHABLE, Channels.COLUMN_SEARCHABLE);
+                CHANNELS_TABLE + "." + Channels.COLUMN_TRANSPORT_STREAM_ID);
+        sChannelProjectionMap.put(Channels.COLUMN_DISPLAY_NUMBER,
+                CHANNELS_TABLE + "." + Channels.COLUMN_DISPLAY_NUMBER);
+        sChannelProjectionMap.put(Channels.COLUMN_DISPLAY_NAME,
+                CHANNELS_TABLE + "." + Channels.COLUMN_DISPLAY_NAME);
+        sChannelProjectionMap.put(Channels.COLUMN_DESCRIPTION,
+                CHANNELS_TABLE + "." + Channels.COLUMN_DESCRIPTION);
+        sChannelProjectionMap.put(Channels.COLUMN_BROWSABLE,
+                CHANNELS_TABLE + "." + Channels.COLUMN_BROWSABLE);
+        sChannelProjectionMap.put(Channels.COLUMN_SEARCHABLE,
+                CHANNELS_TABLE + "." + Channels.COLUMN_SEARCHABLE);
         sChannelProjectionMap.put(Channels.COLUMN_INTERNAL_PROVIDER_DATA,
-                Channels.COLUMN_INTERNAL_PROVIDER_DATA);
-        sChannelProjectionMap.put(Channels.COLUMN_VERSION_NUMBER, Channels.COLUMN_VERSION_NUMBER);
+                CHANNELS_TABLE + "." + Channels.COLUMN_INTERNAL_PROVIDER_DATA);
+        sChannelProjectionMap.put(Channels.COLUMN_VERSION_NUMBER,
+                CHANNELS_TABLE + "." + Channels.COLUMN_VERSION_NUMBER);
 
         sProgramProjectionMap = new HashMap<String, String>();
         sProgramProjectionMap.put(Programs._ID, Programs._ID);
@@ -132,6 +164,10 @@ public class TvProvider extends ContentProvider {
                 Programs.COLUMN_START_TIME_UTC_MILLIS);
         sProgramProjectionMap.put(Programs.COLUMN_END_TIME_UTC_MILLIS,
                 Programs.COLUMN_END_TIME_UTC_MILLIS);
+        sProgramProjectionMap.put(Programs.COLUMN_BROADCAST_GENRE,
+                Programs.COLUMN_BROADCAST_GENRE);
+        sProgramProjectionMap.put(Programs.COLUMN_CANONICAL_GENRE,
+                Programs.COLUMN_CANONICAL_GENRE);
         sProgramProjectionMap.put(Programs.COLUMN_SHORT_DESCRIPTION,
                 Programs.COLUMN_SHORT_DESCRIPTION);
         sProgramProjectionMap.put(Programs.COLUMN_LONG_DESCRIPTION,
@@ -163,18 +199,6 @@ public class TvProvider extends ContentProvider {
         sWatchedProgramProjectionMap.put(WatchedPrograms.COLUMN_DESCRIPTION,
                 WatchedPrograms.COLUMN_DESCRIPTION);
     }
-
-    private static final int DATABASE_VERSION = 7;
-    private static final String DATABASE_NAME = "tv.db";
-    private static final String CHANNELS_TABLE = "channels";
-    private static final String PROGRAMS_TABLE = "programs";
-    private static final String WATCHED_PROGRAMS_TABLE = "watched_programs";
-    private static final String DEFAULT_CHANNELS_SORT_ORDER = Channels.COLUMN_DISPLAY_NUMBER
-            + " ASC";
-    private static final String DEFAULT_PROGRAMS_SORT_ORDER = Programs.COLUMN_START_TIME_UTC_MILLIS
-            + " ASC";
-    private static final String DEFAULT_WATCHED_PROGRAMS_SORT_ORDER =
-            WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS + " DESC";
 
     private static final String PERMISSION_ALL_EPG_DATA = "android.permission.ALL_EPG_DATA";
 
@@ -222,6 +246,8 @@ public class TvProvider extends ContentProvider {
                     + Programs.COLUMN_TITLE + " TEXT,"
                     + Programs.COLUMN_START_TIME_UTC_MILLIS + " INTEGER,"
                     + Programs.COLUMN_END_TIME_UTC_MILLIS + " INTEGER,"
+                    + Programs.COLUMN_BROADCAST_GENRE + " TEXT,"
+                    + Programs.COLUMN_CANONICAL_GENRE + " TEXT,"
                     + Programs.COLUMN_SHORT_DESCRIPTION + " TEXT,"
                     + Programs.COLUMN_LONG_DESCRIPTION + " TEXT,"
                     + Programs_COLUMN_VIDEO_RESOLUTION + " TEXT,"
@@ -326,7 +352,14 @@ public class TvProvider extends ContentProvider {
 
         switch (sUriMatcher.match(uri)) {
             case MATCH_CHANNEL:
-                queryBuilder.setTables(CHANNELS_TABLE);
+                String genre = uri.getQueryParameter(TvContract.PARAM_CANONICAL_GENRE);
+                if (genre == null) {
+                    queryBuilder.setTables(CHANNELS_TABLE);
+                } else {
+                    queryBuilder.setTables(CHANNELS_TABLE_INNER_JOIN_PROGRAMS_TABLE);
+                    selection = insertSelectionForGenre(selection, genre);
+                    selectionArgs = insertSelectionArgsForGenre(selectionArgs, genre);
+                }
                 queryBuilder.setProjectionMap(sChannelProjectionMap);
                 orderBy = DEFAULT_CHANNELS_SORT_ORDER;
                 break;
@@ -361,7 +394,14 @@ public class TvProvider extends ContentProvider {
                 orderBy = DEFAULT_PROGRAMS_SORT_ORDER;
                 break;
             case MATCH_INPUT_PACKAGE_SERVICE_CHANNEL:
-                queryBuilder.setTables(CHANNELS_TABLE);
+                genre = uri.getQueryParameter(TvContract.PARAM_CANONICAL_GENRE);
+                if (genre == null) {
+                    queryBuilder.setTables(CHANNELS_TABLE);
+                } else {
+                    queryBuilder.setTables(CHANNELS_TABLE_INNER_JOIN_PROGRAMS_TABLE);
+                    selection = insertSelectionForGenre(selection, genre);
+                    selectionArgs = insertSelectionArgsForGenre(selectionArgs, genre);
+                }
                 queryBuilder.setProjectionMap(sChannelProjectionMap);
                 boolean browsableOnly = uri.getBooleanQueryParameter(
                         TvContract.PARAM_BROWSABLE_ONLY, true);
@@ -419,6 +459,32 @@ public class TvProvider extends ContentProvider {
         return c;
     }
 
+    private String insertSelectionForGenre(String selection, String genre) {
+        if (genre == null) {
+            return selection;
+        }
+
+        if (Genres.isCanonical(genre)) {
+            return DatabaseUtils.concatenateWhere(selection, SELECTION_PROGRAM_BY_CANONICAL_GENRE);
+        } else {
+            throw new IllegalArgumentException("Not a canonical genre : " + genre);
+        }
+    }
+
+    private String[] insertSelectionArgsForGenre(String[] selectionArgs, String genre) {
+        if (genre == null) {
+            return selectionArgs;
+        }
+
+        if (Genres.isCanonical(genre)) {
+            String curTime = String.valueOf(System.currentTimeMillis());
+            return DatabaseUtils.appendSelectionArgs(selectionArgs,
+                    new String[] { "%" + genre + "%", curTime, curTime });
+        } else {
+            throw new IllegalArgumentException("Not a canonical genre : " + genre);
+        }
+    }
+
     @Override
     public Uri insert(Uri uri, ContentValues values) {
         switch (sUriMatcher.match(uri)) {
@@ -456,6 +522,19 @@ public class TvProvider extends ContentProvider {
     private Uri insertProgram(Uri uri, ContentValues values) {
         // Mark the owner package of this program.
         values.put(Programs.COLUMN_PACKAGE_NAME, getCallingPackage());
+
+        // Check genre.
+        // TODO: Map broadcast genre to the canonical genre
+        String canonicalGenre = values.getAsString(Programs.COLUMN_CANONICAL_GENRE);
+        if (canonicalGenre != null) {
+            String[] genres = Programs.Genres.decode(canonicalGenre);
+            for (String genre : genres) {
+                if (!Genres.isCanonical(genre)) {
+                    values.remove(Programs.COLUMN_CANONICAL_GENRE);
+                    break;
+                }
+            }
+        }
 
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
         long rowId = db.insert(PROGRAMS_TABLE, null, values);
@@ -495,6 +574,10 @@ public class TvProvider extends ContentProvider {
 
         switch (sUriMatcher.match(uri)) {
             case MATCH_CHANNEL:
+                String genre = uri.getQueryParameter(TvContract.PARAM_CANONICAL_GENRE);
+                if (genre != null) {
+                    throw new IllegalArgumentException("Delete not allowed for " + uri);
+                }
                 count = db.delete(CHANNELS_TABLE, selection, selectionArgs);
                 break;
             case MATCH_CHANNEL_ID:
@@ -529,6 +612,10 @@ public class TvProvider extends ContentProvider {
                 }
                 break;
             case MATCH_INPUT_PACKAGE_SERVICE_CHANNEL:
+                genre = uri.getQueryParameter(TvContract.PARAM_CANONICAL_GENRE);
+                if (genre != null) {
+                    throw new IllegalArgumentException("Delete not allowed for " + uri);
+                }
                 boolean browsableOnly = uri.getBooleanQueryParameter(
                         TvContract.PARAM_BROWSABLE_ONLY, true);
                 selection = DatabaseUtils.concatenateWhere(selection, SELECTION_CHANNEL_BY_INPUT
@@ -583,6 +670,10 @@ public class TvProvider extends ContentProvider {
 
         switch (sUriMatcher.match(uri)) {
             case MATCH_CHANNEL:
+                String genre = uri.getQueryParameter(TvContract.PARAM_CANONICAL_GENRE);
+                if (genre != null) {
+                    throw new IllegalArgumentException("Update not allowed for " + uri);
+                }
                 count = db.update(CHANNELS_TABLE, values, selection, selectionArgs);
                 break;
             case MATCH_CHANNEL_ID:
@@ -617,6 +708,10 @@ public class TvProvider extends ContentProvider {
                 }
                 break;
             case MATCH_INPUT_PACKAGE_SERVICE_CHANNEL:
+                genre = uri.getQueryParameter(TvContract.PARAM_CANONICAL_GENRE);
+                if (genre != null) {
+                    throw new IllegalArgumentException("Update not allowed for " + uri);
+                }
                 boolean browsableOnly = uri.getBooleanQueryParameter(
                         TvContract.PARAM_BROWSABLE_ONLY, true);
                 selection = DatabaseUtils.concatenateWhere(selection, SELECTION_CHANNEL_BY_INPUT
