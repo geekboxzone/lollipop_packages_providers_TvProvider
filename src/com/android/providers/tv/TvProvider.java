@@ -231,6 +231,7 @@ public class TvProvider extends ContentProvider {
                     + ");");
             db.execSQL("CREATE TABLE " + WATCHED_PROGRAMS_TABLE + " ("
                     + WatchedPrograms._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
+                    + WatchedPrograms.COLUMN_PACKAGE_NAME + " TEXT NOT NULL,"
                     + WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS + " INTEGER,"
                     + WatchedPrograms.COLUMN_WATCH_END_TIME_UTC_MILLIS + " INTEGER,"
                     + WatchedPrograms.COLUMN_CHANNEL_ID + " INTEGER,"
