@@ -252,9 +252,9 @@ public class TvProvider extends ContentProvider {
             }
 
             // Default upgrade case.
-            db.execSQL("DROP TABLE IF EXISTS " + CHANNELS_TABLE);
-            db.execSQL("DROP TABLE IF EXISTS " + PROGRAMS_TABLE);
             db.execSQL("DROP TABLE IF EXISTS " + WATCHED_PROGRAMS_TABLE);
+            db.execSQL("DROP TABLE IF EXISTS " + PROGRAMS_TABLE);
+            db.execSQL("DROP TABLE IF EXISTS " + CHANNELS_TABLE);
             onCreate(db);
         }
     }
