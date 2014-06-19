@@ -49,9 +49,9 @@ import com.google.android.collect.Sets;
 
 import libcore.io.IoUtils;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -84,7 +84,7 @@ public class TvProvider extends ContentProvider {
     private static final String SELECTION_CHANNEL_BY_INPUT = Channels.COLUMN_PACKAGE_NAME
             + "=? AND " + Channels.COLUMN_SERVICE_NAME + "=?";
 
-    private static final String LOGO_DIRECTORY = "logo";
+    private static final String CHANNELS_COLUMN_LOGO = "logo";
     private static final int MAX_LOGO_IMAGE_SIZE = 256;
 
     // STOPSHIP: Put this into the contract class.
@@ -164,7 +164,7 @@ public class TvProvider extends ContentProvider {
                 WatchedPrograms.COLUMN_DESCRIPTION);
     }
 
-    private static final int DATABASE_VERSION = 6;
+    private static final int DATABASE_VERSION = 7;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
@@ -179,8 +179,11 @@ public class TvProvider extends ContentProvider {
     private static final String PERMISSION_ALL_EPG_DATA = "android.permission.ALL_EPG_DATA";
 
     private static class DatabaseHelper extends SQLiteOpenHelper {
+        private Context mContext;
+
         DatabaseHelper(Context context) {
             super(context, DATABASE_NAME, null, DATABASE_VERSION);
+            mContext = context;
         }
 
         @Override
@@ -209,6 +212,7 @@ public class TvProvider extends ContentProvider {
                     + Channels.COLUMN_BROWSABLE + " INTEGER NOT NULL DEFAULT 1,"
                     + Channels.COLUMN_SEARCHABLE + " INTEGER NOT NULL DEFAULT 1,"
                     + Channels.COLUMN_INTERNAL_PROVIDER_DATA + " BLOB,"
+                    + CHANNELS_COLUMN_LOGO + " BLOB,"
                     + Channels.COLUMN_VERSION_NUMBER + " INTEGER"
                     + ");");
             db.execSQL("CREATE TABLE " + PROGRAMS_TABLE + " ("
@@ -255,12 +259,21 @@ public class TvProvider extends ContentProvider {
             db.execSQL("DROP TABLE IF EXISTS " + WATCHED_PROGRAMS_TABLE);
             db.execSQL("DROP TABLE IF EXISTS " + PROGRAMS_TABLE);
             db.execSQL("DROP TABLE IF EXISTS " + CHANNELS_TABLE);
+
+            // Clear legacy logo directory
+            File logoPath = new File(mContext.getFilesDir(), "logo");
+            if (logoPath.exists()) {
+                for (File file : logoPath.listFiles()) {
+                    file.delete();
+                }
+                logoPath.delete();
+            }
+
             onCreate(db);
         }
     }
 
     private DatabaseHelper mOpenHelper;
-    private File mLogoPath;
 
     @Override
     public boolean onCreate() {
@@ -268,7 +281,6 @@ public class TvProvider extends ContentProvider {
           Log.d(TAG, "Creating TvProvider");
         }
         mOpenHelper = new DatabaseHelper(getContext());
-        mLogoPath = new File(getContext().getFilesDir(), LOGO_DIRECTORY);
         return true;
     }
 
@@ -724,70 +736,71 @@ public class TvProvider extends ContentProvider {
 
     private ParcelFileDescriptor openLogoFile(Uri uri, String mode) throws FileNotFoundException {
         long channelId = Long.parseLong(uri.getPathSegments().get(1));
+
+        SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
+        queryBuilder.setTables(CHANNELS_TABLE);
+
+        String selection = Channels._ID + "=?";
+        String[] selectionArgs = new String[] { String.valueOf(channelId) };
+        if (!callerHasFullEpgAccess()) {
+            selection = DatabaseUtils.concatenateWhere(
+                    selection, Channels.COLUMN_PACKAGE_NAME + "=?");
+            selectionArgs = DatabaseUtils.appendSelectionArgs(
+                    selectionArgs, new String[] { getCallingPackage() });
+        }
+
+        // We don't write the database here.
+        SQLiteDatabase db = mOpenHelper.getReadableDatabase();
         if (mode.equals("r")) {
-            if (!callerOwnsChannelId(channelId) && !callerHasFullEpgAccess()) {
-                throw new FileNotFoundException(uri.toString());
-            }
-            File file = getLogoFile(channelId);
-            if (!file.exists()) {
-                throw new FileNotFoundException("No logo found for channel ID " + channelId);
-            }
-            return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY);
+            String sql = queryBuilder.buildQuery(
+                    new String[] { CHANNELS_COLUMN_LOGO }, selection, null, null, null, null);
+            return DatabaseUtils.blobFileDescriptorForQuery(db, sql, selectionArgs);
         } else {
-            if (!callerOwnsChannelId(channelId)) {
-                throw new FileNotFoundException(uri.toString());
+            Cursor cursor = queryBuilder.query(
+                    db, new String[] { Channels._ID }, selection, selectionArgs, null, null, null);
+            try {
+                if (cursor.getCount() < 1) {
+                    // Fails early if corresponding channel does not exist.
+                    // PipeMonitor may still fail to update DB later.
+                    throw new FileNotFoundException(uri.toString());
+                }
+            } finally {
+                cursor.close();
             }
+
             try {
                 ParcelFileDescriptor[] pipeFds = ParcelFileDescriptor.createPipe();
-                PipeMonitor pipeMonitor = new PipeMonitor(channelId, pipeFds[0]);
+                PipeMonitor pipeMonitor = new PipeMonitor(
+                        pipeFds[0], channelId, selection, selectionArgs);
                 pipeMonitor.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
                 return pipeFds[1];
             } catch (IOException ioe) {
-                FileNotFoundException fne = new FileNotFoundException(
-                        "Could not create temp logo file for channel ID" + channelId);
+                FileNotFoundException fne = new FileNotFoundException(uri.toString());
                 fne.initCause(ioe);
                 throw fne;
             }
         }
     }
 
-    private File getLogoFile(long channelId) {
-        return new File(mLogoPath, String.valueOf(channelId));
-    }
-
-    private boolean callerOwnsChannelId(long channelId) {
-        SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
-        queryBuilder.setTables(CHANNELS_TABLE);
-        queryBuilder.setProjectionMap(sChannelProjectionMap);
-
-        String[] projection = new String[] { Channels._ID };
-        String selection = Channels._ID + "=? AND " + Channels.COLUMN_PACKAGE_NAME + "=?";
-        String[] selectionArgs = new String[] { String.valueOf(channelId), getCallingPackage() };
-
-        SQLiteDatabase db = mOpenHelper.getReadableDatabase();
-        Cursor cursor = queryBuilder.query(
-                db, projection, selection, selectionArgs, null, null, null);
-        try {
-            return cursor.getCount() == 1;
-        } finally {
-            cursor.close();
-        }
-    }
-
     private class PipeMonitor extends AsyncTask<Void, Void, Void> {
-        private final long mChannelId;
         private final ParcelFileDescriptor mPfd;
+        private final long mChannelId;
+        private final String mSelection;
+        private final String[] mSelectionArgs;
 
-        private PipeMonitor(long channelId, ParcelFileDescriptor pfd) {
-            mChannelId = channelId;
+        private PipeMonitor(ParcelFileDescriptor pfd, long channelId,
+                String selection, String[] selectionArgs) {
             mPfd = pfd;
+            mChannelId = channelId;
+            mSelection = selection;
+            mSelectionArgs = selectionArgs;
         }
 
         @Override
         protected Void doInBackground(Void... params) {
             AutoCloseInputStream is = new AutoCloseInputStream(mPfd);
-            File tempFile = null;
-            FileOutputStream fos = null;
+            ByteArrayOutputStream baos = null;
+            int count = 0;
             try {
                 Bitmap bitmap = BitmapFactory.decodeStream(is);
                 if (bitmap == null) {
@@ -803,31 +816,29 @@ public class TvProvider extends ContentProvider {
                             (int) (bitmap.getHeight() * scaleFactor), false);
                 }
 
-                if (!mLogoPath.exists()) {
-                    if (!mLogoPath.mkdirs()) {
-                        Log.e(TAG, "Failed to create logo storage directory " + mLogoPath);
-                        return null;
+                baos = new ByteArrayOutputStream();
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, baos);
+                byte[] bytes = baos.toByteArray();
+
+                ContentValues values = new ContentValues();
+                values.put(CHANNELS_COLUMN_LOGO, bytes);
+
+                SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+                count = db.update(CHANNELS_TABLE, values, mSelection, mSelectionArgs);
+                if (count > 0) {
+                    Uri uri = TvContract.buildChannelLogoUri(mChannelId);
+                    notifyChange(uri);
+                }
+            } finally {
+                if (count == 0) {
+                    try {
+                        mPfd.closeWithError("Failed to write logo for channel ID " + mChannelId);
+                    } catch (IOException ioe) {
+                        Log.e(TAG, "Failed to close pipe", ioe);
                     }
                 }
-                tempFile = File.createTempFile("img", null, mLogoPath);
-                fos = new FileOutputStream(tempFile);
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, fos);
-
-                if (!tempFile.renameTo(getLogoFile(mChannelId))) {
-                    Log.e(TAG, "Failed to rename logo for channel ID " + mChannelId);
-                    return null;
-                }
-                tempFile = null;
-                Uri channelUri = TvContract.buildChannelUri(mChannelId);
-                notifyChange(channelUri);
-            } catch (IOException ioe) {
-                Log.e(TAG, "Failed to write logo for channel ID " + mChannelId, ioe);
-            } finally {
-                IoUtils.closeQuietly(fos);
+                IoUtils.closeQuietly(baos);
                 IoUtils.closeQuietly(is);
-                if (tempFile != null) {
-                    tempFile.delete();
-                }
             }
             return null;
         }
