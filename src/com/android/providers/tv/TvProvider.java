@@ -16,12 +16,15 @@
 
 package com.android.providers.tv;
 
+import android.app.AlarmManager;
+import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.ContentProvider;
 import android.content.ContentProviderOperation;
 import android.content.ContentProviderResult;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.Intent;
 import android.content.OperationApplicationException;
 import android.content.UriMatcher;
 import android.content.pm.PackageManager;
@@ -45,6 +48,8 @@ import android.os.ParcelFileDescriptor;
 import android.os.ParcelFileDescriptor.AutoCloseInputStream;
 import android.text.TextUtils;
 import android.util.Log;
+
+import com.android.internal.annotations.VisibleForTesting;
 
 import com.google.android.collect.Sets;
 
@@ -310,7 +315,25 @@ public class TvProvider extends ContentProvider {
           Log.d(TAG, "Creating TvProvider");
         }
         mOpenHelper = new DatabaseHelper(getContext());
+        scheduleEpgDataCleanup();
         return true;
+    }
+
+    @VisibleForTesting
+    void scheduleEpgDataCleanup() {
+        Intent intent = new Intent(EpgDataCleanupService.ACTION_CLEAN_UP_EPG_DATA);
+        intent.setClass(getContext(), EpgDataCleanupService.class);
+        PendingIntent pendingIntent = PendingIntent.getService(
+                getContext(), 0, intent, PendingIntent.FLAG_UPDATE_CURRENT);
+        AlarmManager alarmManager =
+                (AlarmManager) getContext().getSystemService(Context.ALARM_SERVICE);
+        alarmManager.setInexactRepeating(AlarmManager.RTC, System.currentTimeMillis(),
+                AlarmManager.INTERVAL_HALF_DAY, pendingIntent);
+    }
+
+    @VisibleForTesting
+    String getCallingPackage_() {
+        return getCallingPackage();
     }
 
     @Override
@@ -350,7 +373,7 @@ public class TvProvider extends ContentProvider {
                 throw new IllegalArgumentException("Sort order not allowed for " + uri);
             }
             selection = BaseTvColumns.COLUMN_PACKAGE_NAME + "=?";
-            selectionArgs = new String[] { getCallingPackage() };
+            selectionArgs = new String[] { getCallingPackage_() };
         }
 
         SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
@@ -512,7 +535,7 @@ public class TvProvider extends ContentProvider {
         validateServiceName(values.getAsString(Channels.COLUMN_SERVICE_NAME));
 
         // Mark the owner package of this channel.
-        values.put(Channels.COLUMN_PACKAGE_NAME, getCallingPackage());
+        values.put(Channels.COLUMN_PACKAGE_NAME, getCallingPackage_());
 
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
         long rowId = db.insert(CHANNELS_TABLE, null, values);
@@ -527,7 +550,7 @@ public class TvProvider extends ContentProvider {
 
     private Uri insertProgram(Uri uri, ContentValues values) {
         // Mark the owner package of this program.
-        values.put(Programs.COLUMN_PACKAGE_NAME, getCallingPackage());
+        values.put(Programs.COLUMN_PACKAGE_NAME, getCallingPackage_());
 
         // Check genre.
         // TODO: Map broadcast genre to the canonical genre
@@ -572,7 +595,7 @@ public class TvProvider extends ContentProvider {
                 throw new IllegalArgumentException("Selection not allowed for " + uri);
             }
             selection = BaseTvColumns.COLUMN_PACKAGE_NAME + "=?";
-            selectionArgs = new String[] { getCallingPackage() };
+            selectionArgs = new String[] { getCallingPackage_() };
         }
 
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
@@ -668,7 +691,7 @@ public class TvProvider extends ContentProvider {
                 throw new IllegalArgumentException("Selection not allowed for " + uri);
             }
             selection = BaseTvColumns.COLUMN_PACKAGE_NAME + "=?";
-            selectionArgs = new String[] { getCallingPackage() };
+            selectionArgs = new String[] { getCallingPackage_() };
         }
 
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
@@ -811,12 +834,12 @@ public class TvProvider extends ContentProvider {
     }
 
     private boolean callerHasFullEpgAccess() {
-        return getContext().checkCallingPermission(PERMISSION_ALL_EPG_DATA)
+        return getContext().checkCallingOrSelfPermission(PERMISSION_ALL_EPG_DATA)
                 == PackageManager.PERMISSION_GRANTED;
     }
 
     private void validateServiceName(String serviceName) {
-        String packageName = getCallingPackage();
+        String packageName = getCallingPackage_();
         ComponentName componentName = new ComponentName(packageName, serviceName);
         try {
             getContext().getPackageManager().getServiceInfo(componentName, 0);
@@ -847,7 +870,7 @@ public class TvProvider extends ContentProvider {
             selection = DatabaseUtils.concatenateWhere(
                     selection, Channels.COLUMN_PACKAGE_NAME + "=?");
             selectionArgs = DatabaseUtils.appendSelectionArgs(
-                    selectionArgs, new String[] { getCallingPackage() });
+                    selectionArgs, new String[] { getCallingPackage_() });
         }
 
         // We don't write the database here.

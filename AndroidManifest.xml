@@ -45,6 +45,8 @@
         android:label="@string/permlab_tvWatchLog"
         android:description="@string/permdesc_tvWatchLog" />
 
+    <uses-permission android:name="android.permission.ALL_EPG_DATA" />
+
     <application android:label="@string/app_label">
         <provider
             android:name="TvProvider"
@@ -57,5 +59,7 @@
                 android:pathPrefix="/watched_program"
                 android:permission="android.permission.TV_WATCH_LOG" />
         </provider>
+
+        <service android:name="EpgDataCleanupService" />
     </application>
 </manifest>
