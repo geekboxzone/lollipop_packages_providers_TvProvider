@@ -346,6 +346,9 @@ public class TvProvider extends ContentProvider {
             if (!TextUtils.isEmpty(selection)) {
                 throw new IllegalArgumentException("Selection not allowed for " + uri);
             }
+            if (!TextUtils.isEmpty(sortOrder)) {
+                throw new IllegalArgumentException("Sort order not allowed for " + uri);
+            }
             selection = BaseTvColumns.COLUMN_PACKAGE_NAME + "=?";
             selectionArgs = new String[] { getCallingPackage() };
         }
