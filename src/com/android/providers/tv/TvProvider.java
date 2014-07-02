@@ -60,6 +60,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -206,6 +208,9 @@ public class TvProvider extends ContentProvider {
                 WatchedPrograms.COLUMN_DESCRIPTION);
     }
 
+    // Mapping from broadcast genre to canonical genre.
+    private static Map<String, String> sGenreMap;
+
     private static final String PERMISSION_ALL_EPG_DATA = "android.permission.ALL_EPG_DATA";
 
     private static class DatabaseHelper extends SQLiteOpenHelper {
@@ -318,6 +323,7 @@ public class TvProvider extends ContentProvider {
         }
         mOpenHelper = new DatabaseHelper(getContext());
         scheduleEpgDataCleanup();
+        buildGenreMap();
         return true;
     }
 
@@ -331,6 +337,28 @@ public class TvProvider extends ContentProvider {
                 (AlarmManager) getContext().getSystemService(Context.ALARM_SERVICE);
         alarmManager.setInexactRepeating(AlarmManager.RTC, System.currentTimeMillis(),
                 AlarmManager.INTERVAL_HALF_DAY, pendingIntent);
+    }
+
+    private void buildGenreMap() {
+        if (sGenreMap != null) {
+            return;
+        }
+
+        sGenreMap = new HashMap<String, String>();
+        buildGenreMap(R.array.genre_mapping_atsc);
+        buildGenreMap(R.array.genre_mapping_dvb);
+        // TODO: Map ISDB genre
+    }
+
+    private void buildGenreMap(int id) {
+        String[] maps = getContext().getResources().getStringArray(id);
+        for (String map : maps) {
+            String[] arr = map.split("\\|");
+            if (arr.length != 2) {
+                throw new IllegalArgumentException("Invalid genre mapping : " + map);
+            }
+            sGenreMap.put(arr[0].toUpperCase(), arr[1]);
+        }
     }
 
     @VisibleForTesting
@@ -554,18 +582,7 @@ public class TvProvider extends ContentProvider {
         // Mark the owner package of this program.
         values.put(Programs.COLUMN_PACKAGE_NAME, getCallingPackage_());
 
-        // Check genre.
-        // TODO: Map broadcast genre to the canonical genre
-        String canonicalGenre = values.getAsString(Programs.COLUMN_CANONICAL_GENRE);
-        if (canonicalGenre != null) {
-            String[] genres = Programs.Genres.decode(canonicalGenre);
-            for (String genre : genres) {
-                if (!Genres.isCanonical(genre)) {
-                    values.remove(Programs.COLUMN_CANONICAL_GENRE);
-                    break;
-                }
-            }
-        }
+        checkAndConvertGenre(values);
 
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
         long rowId = db.insert(PROGRAMS_TABLE, null, values);
@@ -715,6 +732,7 @@ public class TvProvider extends ContentProvider {
                 count = db.update(CHANNELS_TABLE, values, selection, selectionArgs);
                 break;
             case MATCH_CHANNEL_ID_PROGRAM:
+                checkAndConvertGenre(values);
                 String paramStartTime = uri.getQueryParameter(TvContract.PARAM_START_TIME);
                 String paramEndTime = uri.getQueryParameter(TvContract.PARAM_END_TIME);
                 if (paramStartTime != null && paramEndTime != null) {
@@ -753,6 +771,7 @@ public class TvProvider extends ContentProvider {
                 count = db.update(CHANNELS_TABLE, values, selection, selectionArgs);
                 break;
             case MATCH_PROGRAM:
+                checkAndConvertGenre(values);
                 count = db.update(PROGRAMS_TABLE, values, selection, selectionArgs);
                 break;
             case MATCH_PROGRAM_ID:
@@ -766,6 +785,7 @@ public class TvProvider extends ContentProvider {
                 count = db.update(WATCHED_PROGRAMS_TABLE, values, selection, selectionArgs);
                 break;
             case MATCH_WATCHED_PROGRAM_ID:
+                checkAndConvertGenre(values);
                 selection = DatabaseUtils.concatenateWhere(selection, WatchedPrograms._ID + "=?");
                 selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
                         uri.getLastPathSegment()
@@ -780,6 +800,42 @@ public class TvProvider extends ContentProvider {
             notifyChange(uri);
         }
         return count;
+    }
+
+    private void checkAndConvertGenre(ContentValues values) {
+        String canonicalGenres = values.getAsString(Programs.COLUMN_CANONICAL_GENRE);
+
+        if (!TextUtils.isEmpty(canonicalGenres)) {
+            // Check if the canonical genres are valid. If not, clear them.
+            String[] genres = Genres.decode(canonicalGenres);
+            for (String genre : genres) {
+                if (!Genres.isCanonical(genre)) {
+                    values.putNull(Programs.COLUMN_CANONICAL_GENRE);
+                    canonicalGenres = null;
+                    break;
+                }
+            }
+        }
+
+        if (TextUtils.isEmpty(canonicalGenres)) {
+            // If the canonical genre is not set, try to map the broadcast genre to the canonical
+            // genre.
+            String broadcastGenres = values.getAsString(Programs.COLUMN_BROADCAST_GENRE);
+            if (!TextUtils.isEmpty(broadcastGenres)) {
+                Set<String> genreSet = new HashSet<String>();
+                String[] genres = Genres.decode(broadcastGenres);
+                for (String genre : genres) {
+                    String canonicalGenre = sGenreMap.get(genre.toUpperCase());
+                    if (Genres.isCanonical(canonicalGenre)) {
+                        genreSet.add(canonicalGenre);
+                    }
+                }
+                if (genreSet.size() > 0) {
+                    values.put(Programs.COLUMN_CANONICAL_GENRE,
+                            Genres.encode(genreSet.toArray(new String[0])));
+                }
+            }
+        }
     }
 
     // We might have more than one thread trying to make its way through applyBatch() so the
