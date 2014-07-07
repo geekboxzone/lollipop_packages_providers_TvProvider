@@ -72,7 +72,7 @@ public class TvProvider extends ContentProvider {
     private static final boolean DEBUG = true;
     private static final String TAG = "TvProvider";
 
-    private static final int DATABASE_VERSION = 9;
+    private static final int DATABASE_VERSION = 10;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
@@ -171,20 +171,17 @@ public class TvProvider extends ContentProvider {
                 Programs.COLUMN_START_TIME_UTC_MILLIS);
         sProgramProjectionMap.put(Programs.COLUMN_END_TIME_UTC_MILLIS,
                 Programs.COLUMN_END_TIME_UTC_MILLIS);
-        sProgramProjectionMap.put(Programs.COLUMN_BROADCAST_GENRE,
-                Programs.COLUMN_BROADCAST_GENRE);
-        sProgramProjectionMap.put(Programs.COLUMN_CANONICAL_GENRE,
-                Programs.COLUMN_CANONICAL_GENRE);
+        sProgramProjectionMap.put(Programs.COLUMN_BROADCAST_GENRE, Programs.COLUMN_BROADCAST_GENRE);
+        sProgramProjectionMap.put(Programs.COLUMN_CANONICAL_GENRE, Programs.COLUMN_CANONICAL_GENRE);
         sProgramProjectionMap.put(Programs.COLUMN_SHORT_DESCRIPTION,
                 Programs.COLUMN_SHORT_DESCRIPTION);
         sProgramProjectionMap.put(Programs.COLUMN_LONG_DESCRIPTION,
                 Programs.COLUMN_LONG_DESCRIPTION);
         sProgramProjectionMap.put(Programs_COLUMN_VIDEO_RESOLUTION,
                 Programs_COLUMN_VIDEO_RESOLUTION);
-        sProgramProjectionMap.put(Programs.COLUMN_POSTER_ART_URI,
-                Programs.COLUMN_POSTER_ART_URI);
-        sProgramProjectionMap.put(Programs.COLUMN_THUMBNAIL_URI,
-                Programs.COLUMN_THUMBNAIL_URI);
+        sProgramProjectionMap.put(Programs.COLUMN_CONTENT_RATING, Programs.COLUMN_CONTENT_RATING);
+        sProgramProjectionMap.put(Programs.COLUMN_POSTER_ART_URI, Programs.COLUMN_POSTER_ART_URI);
+        sProgramProjectionMap.put(Programs.COLUMN_THUMBNAIL_URI, Programs.COLUMN_THUMBNAIL_URI);
         sProgramProjectionMap.put(Programs.COLUMN_INTERNAL_PROVIDER_DATA,
                 Programs.COLUMN_INTERNAL_PROVIDER_DATA);
         sProgramProjectionMap.put(Programs.COLUMN_VERSION_NUMBER, Programs.COLUMN_VERSION_NUMBER);
@@ -259,6 +256,7 @@ public class TvProvider extends ContentProvider {
                     + Programs.COLUMN_SHORT_DESCRIPTION + " TEXT,"
                     + Programs.COLUMN_LONG_DESCRIPTION + " TEXT,"
                     + Programs_COLUMN_VIDEO_RESOLUTION + " TEXT,"
+                    + Programs.COLUMN_CONTENT_RATING + " TEXT,"
                     + Programs.COLUMN_POSTER_ART_URI + " TEXT,"
                     + Programs.COLUMN_THUMBNAIL_URI + " TEXT,"
                     + Programs.COLUMN_INTERNAL_PROVIDER_DATA + " BLOB,"
