@@ -73,7 +73,7 @@ public class TvProvider extends ContentProvider {
     private static final boolean DEBUG = true;
     private static final String TAG = "TvProvider";
 
-    private static final int DATABASE_VERSION = 13;
+    private static final int DATABASE_VERSION = 14;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
@@ -206,6 +206,8 @@ public class TvProvider extends ContentProvider {
                 WatchedPrograms.COLUMN_END_TIME_UTC_MILLIS);
         sWatchedProgramProjectionMap.put(WatchedPrograms.COLUMN_DESCRIPTION,
                 WatchedPrograms.COLUMN_DESCRIPTION);
+        sWatchedProgramProjectionMap.put(WatchedPrograms.COLUMN_TUNE_PARAMS,
+                WatchedPrograms.COLUMN_TUNE_PARAMS);
     }
 
     // Mapping from broadcast genre to canonical genre.
@@ -284,6 +286,7 @@ public class TvProvider extends ContentProvider {
                     + WatchedPrograms.COLUMN_START_TIME_UTC_MILLIS + " INTEGER,"
                     + WatchedPrograms.COLUMN_END_TIME_UTC_MILLIS + " INTEGER,"
                     + WatchedPrograms.COLUMN_DESCRIPTION + " TEXT,"
+                    + WatchedPrograms.COLUMN_TUNE_PARAMS + " TEXT,"
                     + "FOREIGN KEY(" + WatchedPrograms.COLUMN_CHANNEL_ID + ") REFERENCES "
                             + CHANNELS_TABLE + "(" + Channels._ID + ")"
                     + " ON UPDATE CASCADE ON DELETE CASCADE"
