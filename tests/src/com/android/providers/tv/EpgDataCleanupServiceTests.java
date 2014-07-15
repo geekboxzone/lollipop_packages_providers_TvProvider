@@ -42,6 +42,8 @@ import java.util.Objects;
 import java.util.Set;
 
 public class EpgDataCleanupServiceTests extends ServiceTestCase<EpgDataCleanupService> {
+    private static final String FAKE_INPUT_ID = "EpgDataCleanupServiceTests";
+
     private MockContentResolver mResolver;
     private TvProvider mProvider;
 
@@ -116,7 +118,7 @@ public class EpgDataCleanupServiceTests extends ServiceTestCase<EpgDataCleanupSe
 
     private long insertChannel() {
         ContentValues values = new ContentValues();
-        values.put(Channels.COLUMN_SERVICE_NAME, getClass().getName());
+        values.put(Channels.COLUMN_INPUT_ID, FAKE_INPUT_ID);
         Uri uri = mResolver.insert(Channels.CONTENT_URI, values);
         assertNotNull(uri);
         return ContentUris.parseId(uri);

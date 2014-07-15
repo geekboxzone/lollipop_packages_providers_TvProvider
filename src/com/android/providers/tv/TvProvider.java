@@ -18,7 +18,6 @@ package com.android.providers.tv;
 
 import android.app.AlarmManager;
 import android.app.PendingIntent;
-import android.content.ComponentName;
 import android.content.ContentProvider;
 import android.content.ContentProviderOperation;
 import android.content.ContentProviderResult;
@@ -72,7 +71,7 @@ public class TvProvider extends ContentProvider {
     private static final boolean DEBUG = true;
     private static final String TAG = "TvProvider";
 
-    private static final int DATABASE_VERSION = 10;
+    private static final int DATABASE_VERSION = 11;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
@@ -93,7 +92,7 @@ public class TvProvider extends ContentProvider {
     private static final int MATCH_CHANNEL_ID = 2;
     private static final int MATCH_CHANNEL_ID_LOGO = 3;
     private static final int MATCH_CHANNEL_ID_PROGRAM = 4;
-    private static final int MATCH_INPUT_PACKAGE_SERVICE_CHANNEL = 5;
+    private static final int MATCH_INPUT_ID_CHANNEL = 5;
     private static final int MATCH_PROGRAM = 6;
     private static final int MATCH_PROGRAM_ID = 7;
     private static final int MATCH_WATCHED_PROGRAM = 8;
@@ -104,8 +103,7 @@ public class TvProvider extends ContentProvider {
             + Programs.COLUMN_END_TIME_UTC_MILLIS + ">=?";
 
     private static final String SELECTION_CHANNEL_BY_INPUT = CHANNELS_TABLE + "."
-            + Channels.COLUMN_PACKAGE_NAME + "=? AND " + CHANNELS_TABLE + "."
-            + Channels.COLUMN_SERVICE_NAME + "=?";
+            + Channels.COLUMN_INPUT_ID + "=?";
 
     private static final String SELECTION_PROGRAM_BY_CANONICAL_GENRE = "LIKE(?, "
             + Programs.COLUMN_CANONICAL_GENRE + ") AND "
@@ -128,8 +126,8 @@ public class TvProvider extends ContentProvider {
         sUriMatcher.addURI(TvContract.AUTHORITY, "channel/#", MATCH_CHANNEL_ID);
         sUriMatcher.addURI(TvContract.AUTHORITY, "channel/#/logo", MATCH_CHANNEL_ID_LOGO);
         sUriMatcher.addURI(TvContract.AUTHORITY, "channel/#/program", MATCH_CHANNEL_ID_PROGRAM);
-        sUriMatcher.addURI(TvContract.AUTHORITY, "input/*/*/channel",
-                MATCH_INPUT_PACKAGE_SERVICE_CHANNEL);
+        sUriMatcher.addURI(TvContract.AUTHORITY, "input/*/channel",
+                MATCH_INPUT_ID_CHANNEL);
         sUriMatcher.addURI(TvContract.AUTHORITY, "program", MATCH_PROGRAM);
         sUriMatcher.addURI(TvContract.AUTHORITY, "program/#", MATCH_PROGRAM_ID);
         sUriMatcher.addURI(TvContract.AUTHORITY, "watched_program", MATCH_WATCHED_PROGRAM);
@@ -139,8 +137,8 @@ public class TvProvider extends ContentProvider {
         sChannelProjectionMap.put(Channels._ID, CHANNELS_TABLE + "." + Channels._ID);
         sChannelProjectionMap.put(Channels.COLUMN_PACKAGE_NAME,
                 CHANNELS_TABLE + "." + Channels.COLUMN_PACKAGE_NAME);
-        sChannelProjectionMap.put(Channels.COLUMN_SERVICE_NAME,
-                CHANNELS_TABLE + "." + Channels.COLUMN_SERVICE_NAME);
+        sChannelProjectionMap.put(Channels.COLUMN_INPUT_ID,
+                CHANNELS_TABLE + "." + Channels.COLUMN_INPUT_ID);
         sChannelProjectionMap.put(Channels.COLUMN_TYPE,
                 CHANNELS_TABLE + "." + Channels.COLUMN_TYPE);
         sChannelProjectionMap.put(Channels.COLUMN_TRANSPORT_STREAM_ID,
@@ -228,7 +226,7 @@ public class TvProvider extends ContentProvider {
             db.execSQL("CREATE TABLE " + CHANNELS_TABLE + " ("
                     + Channels._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
                     + Channels.COLUMN_PACKAGE_NAME + " TEXT NOT NULL,"
-                    + Channels.COLUMN_SERVICE_NAME + " TEXT NOT NULL,"
+                    + Channels.COLUMN_INPUT_ID + " TEXT NOT NULL,"
                     + Channels.COLUMN_TYPE + " INTEGER NOT NULL DEFAULT 0,"
                     + Channels.COLUMN_SERVICE_TYPE + " INTEGER NOT NULL DEFAULT 1,"
                     + Channels.COLUMN_ORIGINAL_NETWORK_ID + " INTEGER,"
@@ -345,7 +343,7 @@ public class TvProvider extends ContentProvider {
                 return "image/png";
             case MATCH_CHANNEL_ID_PROGRAM:
                 return Programs.CONTENT_TYPE;
-            case MATCH_INPUT_PACKAGE_SERVICE_CHANNEL:
+            case MATCH_INPUT_ID_CHANNEL:
                 return Channels.CONTENT_TYPE;
             case MATCH_PROGRAM:
                 return Programs.CONTENT_TYPE;
@@ -420,7 +418,7 @@ public class TvProvider extends ContentProvider {
                 }
                 orderBy = DEFAULT_PROGRAMS_SORT_ORDER;
                 break;
-            case MATCH_INPUT_PACKAGE_SERVICE_CHANNEL:
+            case MATCH_INPUT_ID_CHANNEL:
                 genre = uri.getQueryParameter(TvContract.PARAM_CANONICAL_GENRE);
                 if (genre == null) {
                     queryBuilder.setTables(CHANNELS_TABLE);
@@ -435,7 +433,7 @@ public class TvProvider extends ContentProvider {
                 selection = DatabaseUtils.concatenateWhere(selection, SELECTION_CHANNEL_BY_INPUT
                         + (browsableOnly ? " AND " + Channels.COLUMN_BROWSABLE + "=1" : ""));
                 selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
-                        TvContract.getPackageName(uri), TvContract.getServiceName(uri)
+                        TvContract.getInputId(uri)
                 });
                 orderBy = DEFAULT_CHANNELS_SORT_ORDER;
                 break;
@@ -530,8 +528,6 @@ public class TvProvider extends ContentProvider {
     }
 
     private Uri insertChannel(Uri uri, ContentValues values) {
-        validateServiceName(values.getAsString(Channels.COLUMN_SERVICE_NAME));
-
         // Mark the owner package of this channel.
         values.put(Channels.COLUMN_PACKAGE_NAME, getCallingPackage_());
 
@@ -638,7 +634,7 @@ public class TvProvider extends ContentProvider {
                     count = db.delete(PROGRAMS_TABLE, selection, selectionArgs);
                 }
                 break;
-            case MATCH_INPUT_PACKAGE_SERVICE_CHANNEL:
+            case MATCH_INPUT_ID_CHANNEL:
                 genre = uri.getQueryParameter(TvContract.PARAM_CANONICAL_GENRE);
                 if (genre != null) {
                     throw new IllegalArgumentException("Delete not allowed for " + uri);
@@ -648,7 +644,7 @@ public class TvProvider extends ContentProvider {
                 selection = DatabaseUtils.concatenateWhere(selection, SELECTION_CHANNEL_BY_INPUT
                         + (browsableOnly ? " AND " + Channels.COLUMN_BROWSABLE + "=1" : ""));
                 selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
-                        TvContract.getPackageName(uri), TvContract.getServiceName(uri)
+                        TvContract.getInputId(uri)
                 });
                 count = db.delete(CHANNELS_TABLE, selection, selectionArgs);
                 break;
@@ -734,7 +730,7 @@ public class TvProvider extends ContentProvider {
                     count = db.update(PROGRAMS_TABLE, values, selection, selectionArgs);
                 }
                 break;
-            case MATCH_INPUT_PACKAGE_SERVICE_CHANNEL:
+            case MATCH_INPUT_ID_CHANNEL:
                 genre = uri.getQueryParameter(TvContract.PARAM_CANONICAL_GENRE);
                 if (genre != null) {
                     throw new IllegalArgumentException("Update not allowed for " + uri);
@@ -744,7 +740,7 @@ public class TvProvider extends ContentProvider {
                 selection = DatabaseUtils.concatenateWhere(selection, SELECTION_CHANNEL_BY_INPUT
                         + (browsableOnly ? " AND " + Channels.COLUMN_BROWSABLE + "=1" : ""));
                 selectionArgs = DatabaseUtils.appendSelectionArgs(selectionArgs, new String[] {
-                        TvContract.getPackageName(uri), TvContract.getServiceName(uri)
+                        TvContract.getInputId(uri)
                 });
                 count = db.update(CHANNELS_TABLE, values, selection, selectionArgs);
                 break;
@@ -834,16 +830,6 @@ public class TvProvider extends ContentProvider {
     private boolean callerHasFullEpgAccess() {
         return getContext().checkCallingOrSelfPermission(PERMISSION_ALL_EPG_DATA)
                 == PackageManager.PERMISSION_GRANTED;
-    }
-
-    private void validateServiceName(String serviceName) {
-        String packageName = getCallingPackage_();
-        ComponentName componentName = new ComponentName(packageName, serviceName);
-        try {
-            getContext().getPackageManager().getServiceInfo(componentName, 0);
-        } catch (PackageManager.NameNotFoundException e) {
-            throw new IllegalArgumentException("Invalid service name: " + serviceName);
-        }
     }
 
     @Override
