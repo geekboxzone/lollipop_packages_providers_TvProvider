@@ -93,10 +93,11 @@ public class TvProvider extends ContentProvider {
     private static final int MATCH_CHANNEL_ID_LOGO = 3;
     private static final int MATCH_CHANNEL_ID_PROGRAM = 4;
     private static final int MATCH_INPUT_ID_CHANNEL = 5;
-    private static final int MATCH_PROGRAM = 6;
-    private static final int MATCH_PROGRAM_ID = 7;
-    private static final int MATCH_WATCHED_PROGRAM = 8;
-    private static final int MATCH_WATCHED_PROGRAM_ID = 9;
+    private static final int MATCH_INPUT_ID_CHANNEL_PASSTHROUGH = 6;
+    private static final int MATCH_PROGRAM = 7;
+    private static final int MATCH_PROGRAM_ID = 8;
+    private static final int MATCH_WATCHED_PROGRAM = 9;
+    private static final int MATCH_WATCHED_PROGRAM_ID = 10;
 
     private static final String SELECTION_OVERLAPPED_PROGRAM = Programs.COLUMN_CHANNEL_ID
             + "=? AND " + Programs.COLUMN_START_TIME_UTC_MILLIS + "<=? AND "
@@ -128,6 +129,8 @@ public class TvProvider extends ContentProvider {
         sUriMatcher.addURI(TvContract.AUTHORITY, "channel/#/program", MATCH_CHANNEL_ID_PROGRAM);
         sUriMatcher.addURI(TvContract.AUTHORITY, "input/*/channel",
                 MATCH_INPUT_ID_CHANNEL);
+        sUriMatcher.addURI(TvContract.AUTHORITY, "input/*/channel/passthrough",
+                MATCH_INPUT_ID_CHANNEL_PASSTHROUGH);
         sUriMatcher.addURI(TvContract.AUTHORITY, "program", MATCH_PROGRAM);
         sUriMatcher.addURI(TvContract.AUTHORITY, "program/#", MATCH_PROGRAM_ID);
         sUriMatcher.addURI(TvContract.AUTHORITY, "watched_program", MATCH_WATCHED_PROGRAM);
@@ -345,6 +348,8 @@ public class TvProvider extends ContentProvider {
                 return Programs.CONTENT_TYPE;
             case MATCH_INPUT_ID_CHANNEL:
                 return Channels.CONTENT_TYPE;
+            case MATCH_INPUT_ID_CHANNEL_PASSTHROUGH:
+                return Channels.CONTENT_ITEM_TYPE;
             case MATCH_PROGRAM:
                 return Programs.CONTENT_TYPE;
             case MATCH_PROGRAM_ID:
