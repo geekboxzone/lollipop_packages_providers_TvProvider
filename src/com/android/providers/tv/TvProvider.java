@@ -71,7 +71,7 @@ public class TvProvider extends ContentProvider {
     private static final boolean DEBUG = true;
     private static final String TAG = "TvProvider";
 
-    private static final int DATABASE_VERSION = 11;
+    private static final int DATABASE_VERSION = 12;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
@@ -168,6 +168,9 @@ public class TvProvider extends ContentProvider {
         sProgramProjectionMap.put(Programs.COLUMN_PACKAGE_NAME, Programs.COLUMN_PACKAGE_NAME);
         sProgramProjectionMap.put(Programs.COLUMN_CHANNEL_ID, Programs.COLUMN_CHANNEL_ID);
         sProgramProjectionMap.put(Programs.COLUMN_TITLE, Programs.COLUMN_TITLE);
+        sProgramProjectionMap.put(Programs.COLUMN_SEASON_NUMBER, Programs.COLUMN_SEASON_NUMBER);
+        sProgramProjectionMap.put(Programs.COLUMN_EPISODE_NUMBER, Programs.COLUMN_EPISODE_NUMBER);
+        sProgramProjectionMap.put(Programs.COLUMN_EPISODE_TITLE, Programs.COLUMN_EPISODE_TITLE);
         sProgramProjectionMap.put(Programs.COLUMN_START_TIME_UTC_MILLIS,
                 Programs.COLUMN_START_TIME_UTC_MILLIS);
         sProgramProjectionMap.put(Programs.COLUMN_END_TIME_UTC_MILLIS,
@@ -250,6 +253,9 @@ public class TvProvider extends ContentProvider {
                     + Programs.COLUMN_PACKAGE_NAME + " TEXT NOT NULL,"
                     + Programs.COLUMN_CHANNEL_ID + " INTEGER,"
                     + Programs.COLUMN_TITLE + " TEXT,"
+                    + Programs.COLUMN_SEASON_NUMBER + " INTEGER,"
+                    + Programs.COLUMN_EPISODE_NUMBER + " INTEGER,"
+                    + Programs.COLUMN_EPISODE_TITLE + " TEXT,"
                     + Programs.COLUMN_START_TIME_UTC_MILLIS + " INTEGER,"
                     + Programs.COLUMN_END_TIME_UTC_MILLIS + " INTEGER,"
                     + Programs.COLUMN_BROADCAST_GENRE + " TEXT,"
