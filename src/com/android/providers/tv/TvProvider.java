@@ -71,7 +71,7 @@ public class TvProvider extends ContentProvider {
     private static final boolean DEBUG = true;
     private static final String TAG = "TvProvider";
 
-    private static final int DATABASE_VERSION = 12;
+    private static final int DATABASE_VERSION = 13;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
@@ -156,8 +156,6 @@ public class TvProvider extends ContentProvider {
                 CHANNELS_TABLE + "." + Channels.COLUMN_BROWSABLE);
         sChannelProjectionMap.put(Channels.COLUMN_SEARCHABLE,
                 CHANNELS_TABLE + "." + Channels.COLUMN_SEARCHABLE);
-        sChannelProjectionMap.put(Channels.COLUMN_CONDITIONAL_ACCESS,
-                CHANNELS_TABLE + "." + Channels.COLUMN_CONDITIONAL_ACCESS);
         sChannelProjectionMap.put(Channels.COLUMN_INTERNAL_PROVIDER_DATA,
                 CHANNELS_TABLE + "." + Channels.COLUMN_INTERNAL_PROVIDER_DATA);
         sChannelProjectionMap.put(Channels.COLUMN_VERSION_NUMBER,
@@ -243,7 +241,6 @@ public class TvProvider extends ContentProvider {
                     + Channels.COLUMN_DESCRIPTION + " TEXT,"
                     + Channels.COLUMN_BROWSABLE + " INTEGER NOT NULL DEFAULT 1,"
                     + Channels.COLUMN_SEARCHABLE + " INTEGER NOT NULL DEFAULT 1,"
-                    + Channels.COLUMN_CONDITIONAL_ACCESS + " INTEGER NOT NULL DEFAULT 0,"
                     + Channels.COLUMN_INTERNAL_PROVIDER_DATA + " BLOB,"
                     + CHANNELS_COLUMN_LOGO + " BLOB,"
                     + Channels.COLUMN_VERSION_NUMBER + " INTEGER"
