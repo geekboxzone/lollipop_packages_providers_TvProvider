@@ -16,8 +16,6 @@
 
 package com.android.providers.tv;
 
-import com.android.internal.annotations.VisibleForTesting;
-
 import android.app.IntentService;
 import android.content.Intent;
 import android.database.Cursor;
@@ -26,6 +24,8 @@ import android.media.tv.TvContract.WatchedPrograms;
 import android.os.SystemClock;
 import android.text.format.DateUtils;
 import android.util.Log;
+
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.concurrent.TimeUnit;
 
