@@ -504,6 +504,9 @@ public class TvProvider extends ContentProvider {
                 });
                 orderBy = DEFAULT_WATCHED_PROGRAMS_SORT_ORDER;
                 break;
+            case MATCH_CHANNEL_ID_LOGO:
+            case MATCH_INPUT_ID_CHANNEL_PASSTHROUGH:
+                throw new UnsupportedOperationException("Cannot query that URI: " + uri);
             default:
                 throw new IllegalArgumentException("Unknown URI " + uri);
         }
@@ -553,14 +556,19 @@ public class TvProvider extends ContentProvider {
     public Uri insert(Uri uri, ContentValues values) {
         switch (sUriMatcher.match(uri)) {
             case MATCH_CHANNEL:
-            case MATCH_CHANNEL_ID:
                 return insertChannel(uri, values);
             case MATCH_PROGRAM:
-            case MATCH_PROGRAM_ID:
                 return insertProgram(uri, values);
             case MATCH_WATCHED_PROGRAM:
-            case MATCH_WATCHED_PROGRAM_ID:
                 return insertWatchedProgram(uri, values);
+            case MATCH_CHANNEL_ID:
+            case MATCH_CHANNEL_ID_LOGO:
+            case MATCH_CHANNEL_ID_PROGRAM:
+            case MATCH_INPUT_ID_CHANNEL:
+            case MATCH_INPUT_ID_CHANNEL_PASSTHROUGH:
+            case MATCH_PROGRAM_ID:
+            case MATCH_WATCHED_PROGRAM_ID:
+                throw new UnsupportedOperationException("Cannot insert into that URI: " + uri);
             default:
                 throw new IllegalArgumentException("Unknown URI " + uri);
         }
@@ -696,6 +704,9 @@ public class TvProvider extends ContentProvider {
                 });
                 count = db.delete(WATCHED_PROGRAMS_TABLE, selection, selectionArgs);
                 break;
+            case MATCH_CHANNEL_ID_LOGO:
+            case MATCH_INPUT_ID_CHANNEL_PASSTHROUGH:
+                throw new UnsupportedOperationException("Cannot delete that URI: " + uri);
             default:
                 throw new IllegalArgumentException("Unknown URI " + uri);
         }
@@ -795,6 +806,9 @@ public class TvProvider extends ContentProvider {
                 });
                 count = db.update(WATCHED_PROGRAMS_TABLE, values, selection, selectionArgs);
                 break;
+            case MATCH_CHANNEL_ID_LOGO:
+            case MATCH_INPUT_ID_CHANNEL_PASSTHROUGH:
+                throw new UnsupportedOperationException("Cannot update that URI: " + uri);
             default:
                 throw new IllegalArgumentException("Unknown URI " + uri);
         }
