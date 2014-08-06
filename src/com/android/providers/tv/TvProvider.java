@@ -98,25 +98,11 @@ public class TvProvider extends ContentProvider {
     private static final int MATCH_CHANNEL = 1;
     private static final int MATCH_CHANNEL_ID = 2;
     private static final int MATCH_CHANNEL_ID_LOGO = 3;
-    private static final int MATCH_CHANNEL_ID_PROGRAM = 4;
-    private static final int MATCH_INPUT_ID_CHANNEL = 5;
-    private static final int MATCH_INPUT_ID_CHANNEL_PASSTHROUGH = 6;
-    private static final int MATCH_PROGRAM = 7;
-    private static final int MATCH_PROGRAM_ID = 8;
-    private static final int MATCH_WATCHED_PROGRAM = 9;
-    private static final int MATCH_WATCHED_PROGRAM_ID = 10;
-
-    private static final String SELECTION_OVERLAPPED_PROGRAM = Programs.COLUMN_CHANNEL_ID
-            + "=? AND " + Programs.COLUMN_START_TIME_UTC_MILLIS + "<=? AND "
-            + Programs.COLUMN_END_TIME_UTC_MILLIS + ">=?";
-
-    private static final String SELECTION_CHANNEL_BY_INPUT = CHANNELS_TABLE + "."
-            + Channels.COLUMN_INPUT_ID + "=?";
-
-    private static final String SELECTION_PROGRAM_BY_CANONICAL_GENRE = "LIKE(?, "
-            + Programs.COLUMN_CANONICAL_GENRE + ") AND "
-            + Programs.COLUMN_START_TIME_UTC_MILLIS + "<=? AND "
-            + Programs.COLUMN_END_TIME_UTC_MILLIS + ">=?";
+    private static final int MATCH_PASSTHROUGH_ID = 4;
+    private static final int MATCH_PROGRAM = 5;
+    private static final int MATCH_PROGRAM_ID = 6;
+    private static final int MATCH_WATCHED_PROGRAM = 7;
+    private static final int MATCH_WATCHED_PROGRAM_ID = 8;
 
     private static final String CHANNELS_COLUMN_LOGO = "logo";
     private static final int MAX_LOGO_IMAGE_SIZE = 256;
@@ -133,11 +119,7 @@ public class TvProvider extends ContentProvider {
         sUriMatcher.addURI(TvContract.AUTHORITY, "channel", MATCH_CHANNEL);
         sUriMatcher.addURI(TvContract.AUTHORITY, "channel/#", MATCH_CHANNEL_ID);
         sUriMatcher.addURI(TvContract.AUTHORITY, "channel/#/logo", MATCH_CHANNEL_ID_LOGO);
-        sUriMatcher.addURI(TvContract.AUTHORITY, "channel/#/program", MATCH_CHANNEL_ID_PROGRAM);
-        sUriMatcher.addURI(TvContract.AUTHORITY, "input/*/channel",
-                MATCH_INPUT_ID_CHANNEL);
-        sUriMatcher.addURI(TvContract.AUTHORITY, "input/*/channel/passthrough",
-                MATCH_INPUT_ID_CHANNEL_PASSTHROUGH);
+        sUriMatcher.addURI(TvContract.AUTHORITY, "passthrough/*", MATCH_PASSTHROUGH_ID);
         sUriMatcher.addURI(TvContract.AUTHORITY, "program", MATCH_PROGRAM);
         sUriMatcher.addURI(TvContract.AUTHORITY, "program/#", MATCH_PROGRAM_ID);
         sUriMatcher.addURI(TvContract.AUTHORITY, "watched_program", MATCH_WATCHED_PROGRAM);
@@ -389,11 +371,7 @@ public class TvProvider extends ContentProvider {
                 return Channels.CONTENT_ITEM_TYPE;
             case MATCH_CHANNEL_ID_LOGO:
                 return "image/png";
-            case MATCH_CHANNEL_ID_PROGRAM:
-                return Programs.CONTENT_TYPE;
-            case MATCH_INPUT_ID_CHANNEL:
-                return Channels.CONTENT_TYPE;
-            case MATCH_INPUT_ID_CHANNEL_PASSTHROUGH:
+            case MATCH_PASSTHROUGH_ID:
                 return Channels.CONTENT_ITEM_TYPE;
             case MATCH_PROGRAM:
                 return Programs.CONTENT_TYPE;
@@ -456,9 +434,7 @@ public class TvProvider extends ContentProvider {
                 return insertWatchedProgram(uri, values);
             case MATCH_CHANNEL_ID:
             case MATCH_CHANNEL_ID_LOGO:
-            case MATCH_CHANNEL_ID_PROGRAM:
-            case MATCH_INPUT_ID_CHANNEL:
-            case MATCH_INPUT_ID_CHANNEL_PASSTHROUGH:
+            case MATCH_PASSTHROUGH_ID:
             case MATCH_PROGRAM_ID:
             case MATCH_WATCHED_PROGRAM_ID:
                 throw new UnsupportedOperationException("Cannot insert into that URI: " + uri);
@@ -548,37 +524,53 @@ public class TvProvider extends ContentProvider {
         }
         switch (sUriMatcher.match(uri)) {
             case MATCH_CHANNEL:
-                processGenre(operation, uri, params);
+                String genre = uri.getQueryParameter(TvContract.PARAM_CANONICAL_GENRE);
+                if (genre == null) {
+                    params.setTables(CHANNELS_TABLE);
+                } else {
+                    if (!operation.equals("Query")) {
+                        throw new IllegalArgumentException(capitalize(operation)
+                                + " not allowed for " + uri);
+                    }
+                    if (!Genres.isCanonical(genre)) {
+                        throw new IllegalArgumentException("Not a canonical genre : " + genre);
+                    }
+                    params.setTables(CHANNELS_TABLE_INNER_JOIN_PROGRAMS_TABLE);
+                    String curTime = String.valueOf(System.currentTimeMillis());
+                    params.appendWhere("LIKE(?, " + Programs.COLUMN_CANONICAL_GENRE + ") AND "
+                            + Programs.COLUMN_START_TIME_UTC_MILLIS + "<=? AND "
+                            + Programs.COLUMN_END_TIME_UTC_MILLIS + ">=?",
+                            "%" + genre + "%", curTime, curTime);
+                }
+                String inputId = uri.getQueryParameter(TvContract.PARAM_INPUT);
+                if (inputId != null) {
+                    params.appendWhere(Channels.COLUMN_INPUT_ID + "=?", inputId);
+                }
+                boolean browsableOnly = uri.getBooleanQueryParameter(
+                        TvContract.PARAM_BROWSABLE_ONLY, false);
+                if (browsableOnly) {
+                    params.appendWhere(Channels.COLUMN_BROWSABLE + "=1");
+                }
                 break;
             case MATCH_CHANNEL_ID:
                 params.setTables(CHANNELS_TABLE);
                 params.appendWhere(Channels._ID + "=?", uri.getLastPathSegment());
                 break;
-            case MATCH_CHANNEL_ID_PROGRAM:
+            case MATCH_PROGRAM:
                 params.setTables(PROGRAMS_TABLE);
+                String paramChannelId = uri.getQueryParameter(TvContract.PARAM_CHANNEL);
+                if (paramChannelId != null) {
+                    String channelId = String.valueOf(Long.parseLong(paramChannelId));
+                    params.appendWhere(Programs.COLUMN_CHANNEL_ID + "=?", channelId);
+                }
                 String paramStartTime = uri.getQueryParameter(TvContract.PARAM_START_TIME);
                 String paramEndTime = uri.getQueryParameter(TvContract.PARAM_END_TIME);
                 if (paramStartTime != null && paramEndTime != null) {
                     String startTime = String.valueOf(Long.parseLong(paramStartTime));
                     String endTime = String.valueOf(Long.parseLong(paramEndTime));
-                    params.appendWhere(SELECTION_OVERLAPPED_PROGRAM,
-                            TvContract.getChannelId(uri), endTime, startTime);
-                } else {
-                    params.appendWhere(Programs.COLUMN_CHANNEL_ID + "=?",
-                            TvContract.getChannelId(uri));
+                    params.appendWhere(Programs.COLUMN_START_TIME_UTC_MILLIS + "<=? AND "
+                            + Programs.COLUMN_END_TIME_UTC_MILLIS + ">=?", endTime, startTime);
                 }
-                break;
-            case MATCH_INPUT_ID_CHANNEL:
-                processGenre(operation, uri, params);
-                params.appendWhere(SELECTION_CHANNEL_BY_INPUT, TvContract.getInputId(uri));
-                boolean browsableOnly = uri.getBooleanQueryParameter(
-                        TvContract.PARAM_BROWSABLE_ONLY, true);
-                if (browsableOnly) {
-                    params.appendWhere(Channels.COLUMN_BROWSABLE + "=1");
-                }
-                break;
-            case MATCH_PROGRAM:
-                params.setTables(PROGRAMS_TABLE);
                 break;
             case MATCH_PROGRAM_ID:
                 params.setTables(PROGRAMS_TABLE);
@@ -592,32 +584,13 @@ public class TvProvider extends ContentProvider {
                 params.appendWhere(WatchedPrograms._ID + "=?", uri.getLastPathSegment());
                 break;
             case MATCH_CHANNEL_ID_LOGO:
-            case MATCH_INPUT_ID_CHANNEL_PASSTHROUGH:
+            case MATCH_PASSTHROUGH_ID:
                 throw new UnsupportedOperationException("Cannot " + operation + " that URI: "
                         + uri);
             default:
                 throw new IllegalArgumentException("Unknown URI " + uri);
         }
         return params;
-    }
-
-    private void processGenre(String operation, Uri uri, SqlParams params) {
-        String genre = uri.getQueryParameter(TvContract.PARAM_CANONICAL_GENRE);
-        if (genre == null) {
-            params.setTables(CHANNELS_TABLE);
-        } else {
-            if (!operation.equals(OP_QUERY)) {
-                throw new IllegalArgumentException(capitalize(operation) + " not allowed for "
-                        + uri);
-            }
-            if (!Genres.isCanonical(genre)) {
-                throw new IllegalArgumentException("Not a canonical genre : " + genre);
-            }
-            params.setTables(CHANNELS_TABLE_INNER_JOIN_PROGRAMS_TABLE);
-            String curTime = String.valueOf(System.currentTimeMillis());
-            params.appendWhere(SELECTION_PROGRAM_BY_CANONICAL_GENRE,
-                    "%" + genre + "%", curTime, curTime);
-        }
     }
 
     private static String capitalize(String str) {
