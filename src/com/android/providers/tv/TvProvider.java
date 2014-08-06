@@ -78,7 +78,7 @@ public class TvProvider extends ContentProvider {
     private static final String OP_UPDATE = "update";
     private static final String OP_DELETE = "delete";
 
-    private static final int DATABASE_VERSION = 15;
+    private static final int DATABASE_VERSION = 16;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
@@ -107,9 +107,6 @@ public class TvProvider extends ContentProvider {
     private static final String CHANNELS_COLUMN_LOGO = "logo";
     private static final int MAX_LOGO_IMAGE_SIZE = 256;
 
-    // STOPSHIP: Put this into the contract class.
-    private static final String Programs_COLUMN_VIDEO_RESOLUTION = "video_resolution";
-
     private static Map<String, String> sChannelProjectionMap;
     private static Map<String, String> sProgramProjectionMap;
     private static Map<String, String> sWatchedProgramProjectionMap;
@@ -133,18 +130,28 @@ public class TvProvider extends ContentProvider {
                 CHANNELS_TABLE + "." + Channels.COLUMN_INPUT_ID);
         sChannelProjectionMap.put(Channels.COLUMN_TYPE,
                 CHANNELS_TABLE + "." + Channels.COLUMN_TYPE);
+        sChannelProjectionMap.put(Channels.COLUMN_SERVICE_TYPE,
+                CHANNELS_TABLE + "." + Channels.COLUMN_SERVICE_TYPE);
+        sChannelProjectionMap.put(Channels.COLUMN_ORIGINAL_NETWORK_ID,
+                CHANNELS_TABLE + "." + Channels.COLUMN_ORIGINAL_NETWORK_ID);
         sChannelProjectionMap.put(Channels.COLUMN_TRANSPORT_STREAM_ID,
                 CHANNELS_TABLE + "." + Channels.COLUMN_TRANSPORT_STREAM_ID);
         sChannelProjectionMap.put(Channels.COLUMN_DISPLAY_NUMBER,
                 CHANNELS_TABLE + "." + Channels.COLUMN_DISPLAY_NUMBER);
         sChannelProjectionMap.put(Channels.COLUMN_DISPLAY_NAME,
                 CHANNELS_TABLE + "." + Channels.COLUMN_DISPLAY_NAME);
+        sChannelProjectionMap.put(Channels.COLUMN_NETWORK_AFFILIATION,
+                CHANNELS_TABLE + "." + Channels.COLUMN_NETWORK_AFFILIATION);
         sChannelProjectionMap.put(Channels.COLUMN_DESCRIPTION,
                 CHANNELS_TABLE + "." + Channels.COLUMN_DESCRIPTION);
+        sChannelProjectionMap.put(Channels.COLUMN_VIDEO_FORMAT,
+                CHANNELS_TABLE + "." + Channels.COLUMN_VIDEO_FORMAT);
         sChannelProjectionMap.put(Channels.COLUMN_BROWSABLE,
                 CHANNELS_TABLE + "." + Channels.COLUMN_BROWSABLE);
         sChannelProjectionMap.put(Channels.COLUMN_SEARCHABLE,
                 CHANNELS_TABLE + "." + Channels.COLUMN_SEARCHABLE);
+        sChannelProjectionMap.put(Channels.COLUMN_LOCKED,
+                CHANNELS_TABLE + "." + Channels.COLUMN_LOCKED);
         sChannelProjectionMap.put(Channels.COLUMN_INTERNAL_PROVIDER_DATA,
                 CHANNELS_TABLE + "." + Channels.COLUMN_INTERNAL_PROVIDER_DATA);
         sChannelProjectionMap.put(Channels.COLUMN_VERSION_NUMBER,
@@ -168,8 +175,9 @@ public class TvProvider extends ContentProvider {
                 Programs.COLUMN_SHORT_DESCRIPTION);
         sProgramProjectionMap.put(Programs.COLUMN_LONG_DESCRIPTION,
                 Programs.COLUMN_LONG_DESCRIPTION);
-        sProgramProjectionMap.put(Programs_COLUMN_VIDEO_RESOLUTION,
-                Programs_COLUMN_VIDEO_RESOLUTION);
+        sProgramProjectionMap.put(Programs.COLUMN_VIDEO_WIDTH, Programs.COLUMN_VIDEO_WIDTH);
+        sProgramProjectionMap.put(Programs.COLUMN_VIDEO_HEIGHT, Programs.COLUMN_VIDEO_HEIGHT);
+        sProgramProjectionMap.put(Programs.COLUMN_AUDIO_LANGUAGE, Programs.COLUMN_AUDIO_LANGUAGE);
         sProgramProjectionMap.put(Programs.COLUMN_CONTENT_RATING, Programs.COLUMN_CONTENT_RATING);
         sProgramProjectionMap.put(Programs.COLUMN_POSTER_ART_URI, Programs.COLUMN_POSTER_ART_URI);
         sProgramProjectionMap.put(Programs.COLUMN_THUMBNAIL_URI, Programs.COLUMN_THUMBNAIL_URI);
@@ -232,9 +240,12 @@ public class TvProvider extends ContentProvider {
                     + Channels.COLUMN_SERVICE_ID + " INTEGER,"
                     + Channels.COLUMN_DISPLAY_NUMBER + " TEXT,"
                     + Channels.COLUMN_DISPLAY_NAME + " TEXT,"
+                    + Channels.COLUMN_NETWORK_AFFILIATION + " TEXT,"
                     + Channels.COLUMN_DESCRIPTION + " TEXT,"
+                    + Channels.COLUMN_VIDEO_FORMAT + " TEXT,"
                     + Channels.COLUMN_BROWSABLE + " INTEGER NOT NULL DEFAULT 1,"
                     + Channels.COLUMN_SEARCHABLE + " INTEGER NOT NULL DEFAULT 1,"
+                    + Channels.COLUMN_LOCKED + " INTEGER NOT NULL DEFAULT 0,"
                     + Channels.COLUMN_INTERNAL_PROVIDER_DATA + " BLOB,"
                     + CHANNELS_COLUMN_LOGO + " BLOB,"
                     + Channels.COLUMN_VERSION_NUMBER + " INTEGER,"
@@ -254,7 +265,9 @@ public class TvProvider extends ContentProvider {
                     + Programs.COLUMN_CANONICAL_GENRE + " TEXT,"
                     + Programs.COLUMN_SHORT_DESCRIPTION + " TEXT,"
                     + Programs.COLUMN_LONG_DESCRIPTION + " TEXT,"
-                    + Programs_COLUMN_VIDEO_RESOLUTION + " TEXT,"
+                    + Programs.COLUMN_VIDEO_WIDTH + " INTEGER,"
+                    + Programs.COLUMN_VIDEO_HEIGHT + " INTEGER,"
+                    + Programs.COLUMN_AUDIO_LANGUAGE + " TEXT,"
                     + Programs.COLUMN_CONTENT_RATING + " TEXT,"
                     + Programs.COLUMN_POSTER_ART_URI + " TEXT,"
                     + Programs.COLUMN_THUMBNAIL_URI + " TEXT,"
