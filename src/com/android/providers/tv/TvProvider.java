@@ -73,7 +73,7 @@ public class TvProvider extends ContentProvider {
     private static final boolean DEBUG = true;
     private static final String TAG = "TvProvider";
 
-    private static final int DATABASE_VERSION = 14;
+    private static final int DATABASE_VERSION = 15;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
@@ -250,7 +250,8 @@ public class TvProvider extends ContentProvider {
                     + Channels.COLUMN_SEARCHABLE + " INTEGER NOT NULL DEFAULT 1,"
                     + Channels.COLUMN_INTERNAL_PROVIDER_DATA + " BLOB,"
                     + CHANNELS_COLUMN_LOGO + " BLOB,"
-                    + Channels.COLUMN_VERSION_NUMBER + " INTEGER"
+                    + Channels.COLUMN_VERSION_NUMBER + " INTEGER,"
+                    + "UNIQUE(" + Channels._ID + "," + Channels.COLUMN_PACKAGE_NAME + ")"
                     + ");");
             db.execSQL("CREATE TABLE " + PROGRAMS_TABLE + " ("
                     + Programs._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -272,9 +273,11 @@ public class TvProvider extends ContentProvider {
                     + Programs.COLUMN_THUMBNAIL_URI + " TEXT,"
                     + Programs.COLUMN_INTERNAL_PROVIDER_DATA + " BLOB,"
                     + Programs.COLUMN_VERSION_NUMBER + " INTEGER,"
-                    + "FOREIGN KEY(" + Programs.COLUMN_CHANNEL_ID + ") REFERENCES "
-                            + CHANNELS_TABLE + "(" + Channels._ID + ")"
-                    + " ON UPDATE CASCADE ON DELETE CASCADE"
+                    + "FOREIGN KEY("
+                            + Programs.COLUMN_CHANNEL_ID + "," + Programs.COLUMN_PACKAGE_NAME
+                            + ") REFERENCES " + CHANNELS_TABLE + "("
+                            + Channels._ID + "," + Channels.COLUMN_PACKAGE_NAME
+                            + ") ON UPDATE CASCADE ON DELETE CASCADE"
                     + ");");
             db.execSQL("CREATE TABLE " + WATCHED_PROGRAMS_TABLE + " ("
                     + WatchedPrograms._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -287,9 +290,12 @@ public class TvProvider extends ContentProvider {
                     + WatchedPrograms.COLUMN_END_TIME_UTC_MILLIS + " INTEGER,"
                     + WatchedPrograms.COLUMN_DESCRIPTION + " TEXT,"
                     + WatchedPrograms.COLUMN_TUNE_PARAMS + " TEXT,"
-                    + "FOREIGN KEY(" + WatchedPrograms.COLUMN_CHANNEL_ID + ") REFERENCES "
-                            + CHANNELS_TABLE + "(" + Channels._ID + ")"
-                    + " ON UPDATE CASCADE ON DELETE CASCADE"
+                    + "FOREIGN KEY("
+                            + WatchedPrograms.COLUMN_CHANNEL_ID + ","
+                            + WatchedPrograms.COLUMN_PACKAGE_NAME
+                            + ") REFERENCES " + CHANNELS_TABLE + "("
+                            + Channels._ID + "," + Channels.COLUMN_PACKAGE_NAME
+                            + ") ON UPDATE CASCADE ON DELETE CASCADE"
                     + ");");
         }
 
