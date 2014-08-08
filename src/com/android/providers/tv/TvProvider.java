@@ -16,6 +16,7 @@
 
 package com.android.providers.tv;
 
+import android.annotation.SuppressLint;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.content.ContentProvider;
@@ -43,13 +44,17 @@ import android.media.tv.TvContract.Programs.Genres;
 import android.media.tv.TvContract.WatchedPrograms;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.Handler;
+import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.os.ParcelFileDescriptor.AutoCloseInputStream;
 import android.text.TextUtils;
+import android.text.format.DateUtils;
 import android.util.Log;
 
-import com.android.providers.tv.util.SqlParams;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.os.SomeArgs;
+import com.android.providers.tv.util.SqlParams;
 import com.google.android.collect.Sets;
 
 import libcore.io.IoUtils;
@@ -78,7 +83,7 @@ public class TvProvider extends ContentProvider {
     private static final String OP_UPDATE = "update";
     private static final String OP_DELETE = "delete";
 
-    private static final int DATABASE_VERSION = 16;
+    private static final int DATABASE_VERSION = 17;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
@@ -91,7 +96,7 @@ public class TvProvider extends ContentProvider {
             WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS + " DESC";
     private static final String CHANNELS_TABLE_INNER_JOIN_PROGRAMS_TABLE = CHANNELS_TABLE
             + " INNER JOIN " + PROGRAMS_TABLE
-            + " ON (" + CHANNELS_TABLE + "." + Channels._ID + " = "
+            + " ON (" + CHANNELS_TABLE + "." + Channels._ID + "="
             + PROGRAMS_TABLE + "." + Programs.COLUMN_CHANNEL_ID + ")";
 
     private static final UriMatcher sUriMatcher;
@@ -106,6 +111,12 @@ public class TvProvider extends ContentProvider {
 
     private static final String CHANNELS_COLUMN_LOGO = "logo";
     private static final int MAX_LOGO_IMAGE_SIZE = 256;
+
+    // The internal column in the watched programs table to indicate whether the current log entry
+    // is consolidated or not. Unconsolidated entries may have columns with missing data.
+    private static final String WATCHED_PROGRAMS_COLUMN_CONSOLIDATED = "consolidated";
+
+    private static final long MAX_PROGRAM_DATA_DELAY_IN_MILLIS = 5 * 1000; // 5 seconds
 
     private static Map<String, String> sChannelProjectionMap;
     private static Map<String, String> sProgramProjectionMap;
@@ -201,8 +212,12 @@ public class TvProvider extends ContentProvider {
                 WatchedPrograms.COLUMN_END_TIME_UTC_MILLIS);
         sWatchedProgramProjectionMap.put(WatchedPrograms.COLUMN_DESCRIPTION,
                 WatchedPrograms.COLUMN_DESCRIPTION);
-        sWatchedProgramProjectionMap.put(WatchedPrograms.COLUMN_TUNE_PARAMS,
-                WatchedPrograms.COLUMN_TUNE_PARAMS);
+        sWatchedProgramProjectionMap.put(WatchedPrograms.COLUMN_INTERNAL_TUNE_PARAMS,
+                WatchedPrograms.COLUMN_INTERNAL_TUNE_PARAMS);
+        sWatchedProgramProjectionMap.put(WatchedPrograms.COLUMN_INTERNAL_SESSION_TOKEN,
+                WatchedPrograms.COLUMN_INTERNAL_SESSION_TOKEN);
+        sWatchedProgramProjectionMap.put(WATCHED_PROGRAMS_COLUMN_CONSOLIDATED,
+                WATCHED_PROGRAMS_COLUMN_CONSOLIDATED);
     }
 
     // Mapping from broadcast genre to canonical genre.
@@ -211,7 +226,7 @@ public class TvProvider extends ContentProvider {
     private static final String PERMISSION_ALL_EPG_DATA = "android.permission.ALL_EPG_DATA";
 
     private static class DatabaseHelper extends SQLiteOpenHelper {
-        private Context mContext;
+        private final Context mContext;
 
         DatabaseHelper(Context context) {
             super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -282,14 +297,18 @@ public class TvProvider extends ContentProvider {
             db.execSQL("CREATE TABLE " + WATCHED_PROGRAMS_TABLE + " ("
                     + WatchedPrograms._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
                     + WatchedPrograms.COLUMN_PACKAGE_NAME + " TEXT NOT NULL,"
-                    + WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS + " INTEGER,"
-                    + WatchedPrograms.COLUMN_WATCH_END_TIME_UTC_MILLIS + " INTEGER,"
+                    + WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS
+                    + " INTEGER NOT NULL DEFAULT 0,"
+                    + WatchedPrograms.COLUMN_WATCH_END_TIME_UTC_MILLIS
+                    + " INTEGER NOT NULL DEFAULT 0,"
                     + WatchedPrograms.COLUMN_CHANNEL_ID + " INTEGER,"
                     + WatchedPrograms.COLUMN_TITLE + " TEXT,"
                     + WatchedPrograms.COLUMN_START_TIME_UTC_MILLIS + " INTEGER,"
                     + WatchedPrograms.COLUMN_END_TIME_UTC_MILLIS + " INTEGER,"
                     + WatchedPrograms.COLUMN_DESCRIPTION + " TEXT,"
-                    + WatchedPrograms.COLUMN_TUNE_PARAMS + " TEXT,"
+                    + WatchedPrograms.COLUMN_INTERNAL_TUNE_PARAMS + " TEXT,"
+                    + WatchedPrograms.COLUMN_INTERNAL_SESSION_TOKEN + " TEXT NOT NULL,"
+                    + WATCHED_PROGRAMS_COLUMN_CONSOLIDATED + " INTEGER NOT NULL DEFAULT 0,"
                     + "FOREIGN KEY("
                             + WatchedPrograms.COLUMN_CHANNEL_ID + ","
                             + WatchedPrograms.COLUMN_PACKAGE_NAME
@@ -325,12 +344,15 @@ public class TvProvider extends ContentProvider {
 
     private DatabaseHelper mOpenHelper;
 
+    private final Handler mLogHandler = new WatchLogHandler();
+
     @Override
     public boolean onCreate() {
         if (DEBUG) {
           Log.d(TAG, "Creating TvProvider");
         }
         mOpenHelper = new DatabaseHelper(getContext());
+        deleteUnconsolidatedWatchedProgramsRows();
         scheduleEpgDataCleanup();
         buildGenreMap();
         return true;
@@ -359,6 +381,7 @@ public class TvProvider extends ContentProvider {
         // TODO: Map ISDB genre
     }
 
+    @SuppressLint("DefaultLocale")
     private void buildGenreMap(int id) {
         String[] maps = getContext().getResources().getStringArray(id);
         for (String map : maps) {
@@ -489,15 +512,36 @@ public class TvProvider extends ContentProvider {
     }
 
     private Uri insertWatchedProgram(Uri uri, ContentValues values) {
-        SQLiteDatabase db = mOpenHelper.getWritableDatabase();
-        long rowId = db.insert(WATCHED_PROGRAMS_TABLE, null, values);
-        if (rowId > 0) {
-            Uri watchedProgramUri = TvContract.buildWatchedProgramUri(rowId);
-            notifyChange(watchedProgramUri);
-            return watchedProgramUri;
+        if (DEBUG) {
+            Log.d(TAG, "insertWatchedProgram(uri=" + uri + ", values=" + values + ")");
         }
-
-        throw new SQLException("Failed to insert row into " + uri);
+        Long watchStartTime = values.getAsLong(WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS);
+        Long watchEndTime = values.getAsLong(WatchedPrograms.COLUMN_WATCH_END_TIME_UTC_MILLIS);
+        // The system sends only two kinds of watch events:
+        // 1. The user tunes to a new channel. (COLUMN_WATCH_START_TIME_UTC_MILLIS)
+        // 2. The user stops watching. (COLUMN_WATCH_END_TIME_UTC_MILLIS)
+        if (watchStartTime != null && watchEndTime == null) {
+            SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+            long rowId = db.insert(WATCHED_PROGRAMS_TABLE, null, values);
+            if (rowId > 0) {
+                mLogHandler.removeMessages(WatchLogHandler.MSG_TRY_CONSOLIDATE_ALL);
+                mLogHandler.sendEmptyMessage(WatchLogHandler.MSG_TRY_CONSOLIDATE_ALL);
+                Uri watchedProgramUri = TvContract.buildWatchedProgramUri(rowId);
+                notifyChange(watchedProgramUri);
+                return watchedProgramUri;
+            }
+            throw new SQLException("Failed to insert row into " + uri);
+        } else if (watchStartTime == null && watchEndTime != null) {
+            SomeArgs args = SomeArgs.obtain();
+            args.arg1 = values.getAsString(WatchedPrograms.COLUMN_INTERNAL_SESSION_TOKEN);
+            args.arg2 = watchEndTime;
+            Message msg = mLogHandler.obtainMessage(WatchLogHandler.MSG_CONSOLIDATE, args);
+            mLogHandler.sendMessageDelayed(msg, MAX_PROGRAM_DATA_DELAY_IN_MILLIS);
+            return null;
+        }
+        // All the other cases are invalid.
+        throw new IllegalArgumentException("Only one of COLUMN_WATCH_START_TIME_UTC_MILLIS and"
+                + " COLUMN_WATCH_END_TIME_UTC_MILLIS should be specified");
     }
 
     @Override
@@ -591,10 +635,12 @@ public class TvProvider extends ContentProvider {
                 break;
             case MATCH_WATCHED_PROGRAM:
                 params.setTables(WATCHED_PROGRAMS_TABLE);
+                params.appendWhere(WATCHED_PROGRAMS_COLUMN_CONSOLIDATED + "=?", "1");
                 break;
             case MATCH_WATCHED_PROGRAM_ID:
                 params.setTables(WATCHED_PROGRAMS_TABLE);
                 params.appendWhere(WatchedPrograms._ID + "=?", uri.getLastPathSegment());
+                params.appendWhere(WATCHED_PROGRAMS_COLUMN_CONSOLIDATED + "=?", "1");
                 break;
             case MATCH_CHANNEL_ID_LOGO:
             case MATCH_PASSTHROUGH_ID:
@@ -610,6 +656,7 @@ public class TvProvider extends ContentProvider {
         return Character.toUpperCase(str.charAt(0)) + str.substring(1);
     }
 
+    @SuppressLint("DefaultLocale")
     private void checkAndConvertGenre(ContentValues values) {
         String canonicalGenres = values.getAsString(Programs.COLUMN_CANONICAL_GENRE);
 
@@ -733,17 +780,13 @@ public class TvProvider extends ContentProvider {
                     params.getSelection(), null, null, null, null);
             return DatabaseUtils.blobFileDescriptorForQuery(db, sql, params.getSelectionArgs());
         } else {
-            Cursor cursor = queryBuilder.query(
-                    db, new String[] { Channels._ID }, params.getSelection(),
-                    params.getSelectionArgs(), null, null, null);
-            try {
+            try (Cursor cursor = queryBuilder.query(db, new String[] { Channels._ID },
+                    params.getSelection(), params.getSelectionArgs(), null, null, null)) {
                 if (cursor.getCount() < 1) {
                     // Fails early if corresponding channel does not exist.
                     // PipeMonitor may still fail to update DB later.
                     throw new FileNotFoundException(uri.toString());
                 }
-            } finally {
-                cursor.close();
             }
 
             try {
@@ -816,6 +859,341 @@ public class TvProvider extends ContentProvider {
                 IoUtils.closeQuietly(is);
             }
             return null;
+        }
+    }
+
+    private final void deleteUnconsolidatedWatchedProgramsRows() {
+        SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+        db.delete(WATCHED_PROGRAMS_TABLE, WATCHED_PROGRAMS_COLUMN_CONSOLIDATED + "=0", null);
+    }
+
+    private final class WatchLogHandler extends Handler {
+        private static final int MSG_CONSOLIDATE = 1;
+        private static final int MSG_TRY_CONSOLIDATE_ALL = 2;
+
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case MSG_CONSOLIDATE: {
+                    SomeArgs args = (SomeArgs) msg.obj;
+                    String sessionToken = (String) args.arg1;
+                    long watchEndTime = (long) args.arg2;
+                    onConsolidate(sessionToken, watchEndTime);
+                    args.recycle();
+                    return;
+                }
+                case MSG_TRY_CONSOLIDATE_ALL: {
+                    onTryConsolidateAll();
+                    return;
+                }
+                default: {
+                    Log.w(TAG, "Unhandled message code: " + msg.what);
+                    return;
+                }
+            }
+        }
+
+        private static final long DEFAULT_CONSOLIDATION_INTERNAL_IN_MILLIS = 30 * 60 * 1000;
+
+        // Consolidates all WatchedPrograms rows for a given session with watch end time information
+        // of the most recent log entry. After this method is called, it is guaranteed that there
+        // remain consolidated rows only for that session.
+        private final void onConsolidate(String sessionToken, long watchEndTime) {
+            if (DEBUG) {
+                Log.d(TAG, "onConsolidate(sessionToken=" + sessionToken + ", watchEndTime="
+                        + watchEndTime + ")");
+            }
+
+            SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
+            queryBuilder.setTables(WATCHED_PROGRAMS_TABLE);
+            SQLiteDatabase db = mOpenHelper.getReadableDatabase();
+
+            // Pick up the last row with the same session token.
+            String[] projection = {
+                    WatchedPrograms._ID,
+                    WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS,
+                    WatchedPrograms.COLUMN_CHANNEL_ID
+            };
+            String selection = WATCHED_PROGRAMS_COLUMN_CONSOLIDATED + "=? AND "
+                    + WatchedPrograms.COLUMN_INTERNAL_SESSION_TOKEN + "=?";
+            String[] selectionArgs = {
+                    "0",
+                    sessionToken
+            };
+            String sortOrder = WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS + " DESC";
+
+            int consolidatedRowCount = 0;
+            try (Cursor cursor = queryBuilder.query(db, projection, selection, selectionArgs, null,
+                    null, sortOrder)) {
+                long oldWatchStartTime = watchEndTime;
+                while (cursor != null && cursor.moveToNext()) {
+                    long id = cursor.getLong(0);
+                    long watchStartTime = cursor.getLong(1);
+                    long channelId = cursor.getLong(2);
+                    consolidatedRowCount += consolidateRow(id, watchStartTime, oldWatchStartTime,
+                            channelId, false);
+                    oldWatchStartTime = watchStartTime;
+                }
+            }
+            if (consolidatedRowCount > 0) {
+                deleteUnsearchable();
+            }
+        }
+
+        // Tries to consolidate all WatchedPrograms rows regardless of the session. After this
+        // method is called, it is guaranteed that we have at most one unconsolidated log entry per
+        // session that represents the user's ongoing watch activity.
+        // Also, this method automatically schedules the next consolidation if there still remains
+        // an unconsolidated entry.
+        private final void onTryConsolidateAll() {
+            if (DEBUG) {
+                Log.d(TAG, "onTryConsolidateAll()");
+            }
+
+            SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
+            queryBuilder.setTables(WATCHED_PROGRAMS_TABLE);
+            SQLiteDatabase db = mOpenHelper.getReadableDatabase();
+
+            // Pick up all unconsolidated rows grouped by session. The most recent log entry goes on
+            // top.
+            String[] projection = {
+                    WatchedPrograms._ID,
+                    WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS,
+                    WatchedPrograms.COLUMN_CHANNEL_ID,
+                    WatchedPrograms.COLUMN_INTERNAL_SESSION_TOKEN
+            };
+            String selection = WATCHED_PROGRAMS_COLUMN_CONSOLIDATED + "=0";
+            String sortOrder = WatchedPrograms.COLUMN_INTERNAL_SESSION_TOKEN + " DESC,"
+                    + WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS + " DESC";
+
+            int consolidatedRowCount = 0;
+            int unconsolidatedRowCount = 0;
+            try (Cursor cursor = queryBuilder.query(db, projection, selection, null, null, null,
+                    sortOrder)) {
+                if (cursor == null) {
+                    return;
+                }
+                unconsolidatedRowCount = cursor.getCount();
+
+                long oldWatchStartTime = 0;
+                String oldSessionToken = null;
+                while (cursor != null && cursor.moveToNext()) {
+                    long id = cursor.getLong(0);
+                    long watchStartTime = cursor.getLong(1);
+                    long channelId = cursor.getLong(2);
+                    String sessionToken = cursor.getString(3);
+
+                    if (!sessionToken.equals(oldSessionToken)) {
+                        // The most recent log entry for the current session, which may be still
+                        // active. Just go through a dry run with the current time to see if this
+                        // entry can be split into multiple rows.
+                        consolidatedRowCount += consolidateRow(id, watchStartTime,
+                                System.currentTimeMillis(), channelId, true);
+                        oldSessionToken = sessionToken;
+                    } else {
+                        // The later entries after the most recent one all fall into here. We now
+                        // know that this watch activity ended exactly at the same time when the
+                        // next activity started.
+                        consolidatedRowCount += consolidateRow(id, watchStartTime,
+                                oldWatchStartTime, channelId, false);
+                    }
+                    oldWatchStartTime = watchStartTime;
+                }
+            }
+            unconsolidatedRowCount -= consolidatedRowCount;
+
+            if (consolidatedRowCount > 0) {
+                deleteUnsearchable();
+            }
+            if (unconsolidatedRowCount > 0) {
+                scheduleNext();
+            }
+        }
+
+        // Consolidates a WatchedPrograms row.
+        // A row is 'consolidated' if and only if the following information is complete:
+        // 1. WatchedPrograms.COLUMN_CHANNEL_ID
+        // 2. WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS
+        // 3. WatchedPrograms.COLUMN_WATCH_END_TIME_UTC_MILLIS
+        // where COLUMN_WATCH_START_TIME_UTC_MILLIS <= COLUMN_WATCH_END_TIME_UTC_MILLIS.
+        // This is the minimal but useful enough set of information to comprise the user's watch
+        // history. (The program data are considered optional although we do try to fill them while
+        // consolidating the row.) It is guaranteed that the target row is either consolidated or
+        // deleted after this method is called.
+        // Set {@code dryRun} to {@code true} if you think it's necessary to split the row without
+        // consolidating the most recent row because the user stayed on the same channel for a very
+        // long time.
+        // This method returns the number of consolidated rows, which can be 0 or more.
+        private final int consolidateRow(long id, long watchStartTime, long watchEndTime,
+                long channelId, boolean dryRun) {
+            if (DEBUG) {
+                Log.d(TAG, "consolidateRow(id=" + id + ", watchStartTime=" + watchStartTime
+                        + ", watchEndTime=" + watchEndTime + ", channelId=" + channelId
+                        + ", dryRun=" + dryRun + ")");
+            }
+
+            SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+
+            if (watchStartTime > watchEndTime) {
+                Log.e(TAG, "watchEndTime cannot be less than watchStartTime");
+                db.delete(WATCHED_PROGRAMS_TABLE, WatchedPrograms._ID + "=" + String.valueOf(id),
+                        null);
+                return 0;
+            }
+
+            ContentValues values = getProgramValues(watchStartTime, channelId);
+            Long endTime = values.getAsLong(WatchedPrograms.COLUMN_END_TIME_UTC_MILLIS);
+            boolean needsToSplit = endTime != null && endTime < watchEndTime;
+
+            values.put(WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS,
+                    String.valueOf(watchStartTime));
+            if (!dryRun || needsToSplit) {
+                values.put(WatchedPrograms.COLUMN_WATCH_END_TIME_UTC_MILLIS,
+                        String.valueOf(needsToSplit ? endTime : watchEndTime));
+                values.put(WATCHED_PROGRAMS_COLUMN_CONSOLIDATED, "1");
+            }
+            int count = db.update(WATCHED_PROGRAMS_TABLE, values, WatchedPrograms._ID + "="
+                    + String.valueOf(id), null);
+
+            if (needsToSplit) {
+                // This means that the program ended before the user stops watching the current
+                // channel. In this case we duplicate the log entry as many as the number of
+                // programs watched on the same channel. Here the end time of the current program
+                // becomes the new watch start time of the next program.
+                long duplicatedId = duplicateRow(id);
+                if (duplicatedId > 0) {
+                    count += consolidateRow(duplicatedId, endTime, watchEndTime, channelId, dryRun);
+                }
+            }
+            return count;
+        }
+
+        // Deletes the log entries from unsearchable channels. Note that only consolidated log
+        // entries are safe to delete.
+        private final void deleteUnsearchable() {
+            SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+            String deleteWhere = WATCHED_PROGRAMS_COLUMN_CONSOLIDATED + "=1 AND "
+                    + WatchedPrograms.COLUMN_CHANNEL_ID + " IN (SELECT " + Channels._ID
+                    + " FROM " + CHANNELS_TABLE + " WHERE " + Channels.COLUMN_SEARCHABLE + "=0)";
+            db.delete(WATCHED_PROGRAMS_TABLE, deleteWhere, null);
+        }
+
+        // Schedules the next consolidation.
+        private final void scheduleNext() {
+            SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
+            queryBuilder.setTables(WATCHED_PROGRAMS_TABLE);
+            SQLiteDatabase db = mOpenHelper.getReadableDatabase();
+
+            // Pick up all unconsolidated rows.
+            String[] projection = {
+                    WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS,
+                    WatchedPrograms.COLUMN_CHANNEL_ID,
+            };
+            String selection = WATCHED_PROGRAMS_COLUMN_CONSOLIDATED + "=0";
+
+            try (Cursor cursor = queryBuilder.query(db, projection, selection, null, null, null,
+                    null)) {
+                if (cursor == null || !cursor.moveToNext()) {
+                    return;
+                }
+                // Find the earliest program end time and schedule the next consolidation at that
+                // time.
+                long minEndTime = Math.max(cursor.getLong(0),
+                        System.currentTimeMillis() + DEFAULT_CONSOLIDATION_INTERNAL_IN_MILLIS);
+                while (cursor.moveToNext()) {
+                    long watchStartTime = cursor.getLong(0);
+                    long channelId = cursor.getLong(1);
+                    ContentValues values = getProgramValues(watchStartTime, channelId);
+                    Long endTime = values.getAsLong(WatchedPrograms.COLUMN_END_TIME_UTC_MILLIS);
+
+                    if (endTime != null && endTime < minEndTime
+                            && endTime > System.currentTimeMillis()) {
+                        minEndTime = endTime;
+                    }
+                }
+                sendEmptyMessageAtTime(MSG_TRY_CONSOLIDATE_ALL, minEndTime);
+                if (DEBUG) {
+                    CharSequence minEndTimeStr = DateUtils.getRelativeTimeSpanString(minEndTime,
+                            System.currentTimeMillis(), DateUtils.SECOND_IN_MILLIS);
+                    Log.d(TAG, "MSG_CONSOLIDATE_ALL scheduled " + minEndTimeStr);
+                }
+            }
+        }
+
+        // Returns non-null ContentValues of the program data that the user watched on the channel
+        // {@code channelId} at the time {@code watchStartTime}.
+        private final ContentValues getProgramValues(long watchStartTime, long channelId) {
+            if (DEBUG) {
+                Log.d(TAG, "getProgramValues(watchStartTime=" + watchStartTime + ", channelId="
+                        + channelId + ")");
+            }
+
+            SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
+            queryBuilder.setTables(PROGRAMS_TABLE);
+            SQLiteDatabase db = mOpenHelper.getReadableDatabase();
+
+            String[] projection = {
+                    Programs.COLUMN_TITLE,
+                    Programs.COLUMN_START_TIME_UTC_MILLIS,
+                    Programs.COLUMN_END_TIME_UTC_MILLIS,
+                    Programs.COLUMN_SHORT_DESCRIPTION
+            };
+            String selection = Programs.COLUMN_CHANNEL_ID + "=? AND "
+                    + Programs.COLUMN_START_TIME_UTC_MILLIS + "<=? AND "
+                    + Programs.COLUMN_END_TIME_UTC_MILLIS + ">?";
+            String[] selectionArgs = {
+                    String.valueOf(channelId),
+                    String.valueOf(watchStartTime),
+                    String.valueOf(watchStartTime)
+            };
+            String sortOrder = Programs.COLUMN_START_TIME_UTC_MILLIS + " ASC";
+
+            try (Cursor cursor = queryBuilder.query(db, projection, selection, selectionArgs, null,
+                    null, sortOrder)) {
+                ContentValues values = new ContentValues();
+                if (cursor != null && cursor.moveToNext()) {
+                    values.put(WatchedPrograms.COLUMN_TITLE, cursor.getString(0));
+                    values.put(WatchedPrograms.COLUMN_START_TIME_UTC_MILLIS, cursor.getLong(1));
+                    values.put(WatchedPrograms.COLUMN_END_TIME_UTC_MILLIS, cursor.getLong(2));
+                    values.put(WatchedPrograms.COLUMN_DESCRIPTION, cursor.getString(3));
+                    if (DEBUG) {
+                        Log.d(TAG, "values={" + values + "}");
+                    }
+                }
+                return values;
+            }
+        }
+
+        // Duplicates the WatchedPrograms row with a given ID and returns the ID of the duplicated
+        // row. Returns -1 if failed.
+        private final long duplicateRow(long id) {
+            if (DEBUG) {
+                Log.d(TAG, "duplicateRow(" + id + ")");
+            }
+
+            SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
+            queryBuilder.setTables(WATCHED_PROGRAMS_TABLE);
+            SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+
+            String[] projection = {
+                    WatchedPrograms.COLUMN_PACKAGE_NAME,
+                    WatchedPrograms.COLUMN_CHANNEL_ID,
+                    WatchedPrograms.COLUMN_INTERNAL_SESSION_TOKEN
+            };
+            String selection = WatchedPrograms._ID + "=" + String.valueOf(id);
+
+            try (Cursor cursor = queryBuilder.query(db, projection, selection, null, null, null,
+                    null)) {
+                long rowId = -1;
+                if (cursor != null && cursor.moveToNext()) {
+                    ContentValues values = new ContentValues();
+                    values.put(WatchedPrograms.COLUMN_PACKAGE_NAME, cursor.getString(0));
+                    values.put(WatchedPrograms.COLUMN_CHANNEL_ID, cursor.getLong(1));
+                    values.put(WatchedPrograms.COLUMN_INTERNAL_SESSION_TOKEN, cursor.getString(3));
+                    rowId = db.insert(WATCHED_PROGRAMS_TABLE, null, values);
+                }
+                return rowId;
+            }
         }
     }
 }
