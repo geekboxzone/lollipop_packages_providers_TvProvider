@@ -136,6 +136,8 @@ public class TvProvider extends ContentProvider {
                 CHANNELS_TABLE + "." + Channels.COLUMN_ORIGINAL_NETWORK_ID);
         sChannelProjectionMap.put(Channels.COLUMN_TRANSPORT_STREAM_ID,
                 CHANNELS_TABLE + "." + Channels.COLUMN_TRANSPORT_STREAM_ID);
+        sChannelProjectionMap.put(Channels.COLUMN_SERVICE_ID,
+                CHANNELS_TABLE + "." + Channels.COLUMN_SERVICE_ID);
         sChannelProjectionMap.put(Channels.COLUMN_DISPLAY_NUMBER,
                 CHANNELS_TABLE + "." + Channels.COLUMN_DISPLAY_NUMBER);
         sChannelProjectionMap.put(Channels.COLUMN_DISPLAY_NAME,
