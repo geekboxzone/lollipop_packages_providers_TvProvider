@@ -585,7 +585,7 @@ public class TvProvider extends ContentProvider {
                 if (genre == null) {
                     params.setTables(CHANNELS_TABLE);
                 } else {
-                    if (!operation.equals("Query")) {
+                    if (!operation.equals(OP_QUERY)) {
                         throw new IllegalArgumentException(capitalize(operation)
                                 + " not allowed for " + uri);
                     }
