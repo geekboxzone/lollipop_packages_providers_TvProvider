@@ -515,7 +515,7 @@ public class TvProvider extends ContentProvider {
 
     private Uri insertWatchedProgram(Uri uri, ContentValues values) {
         if (DEBUG) {
-            Log.d(TAG, "insertWatchedProgram(uri=" + uri + ", values=" + values + ")");
+            Log.d(TAG, "insertWatchedProgram(uri=" + uri + ", values={" + values + "})");
         }
         Long watchStartTime = values.getAsLong(WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS);
         Long watchEndTime = values.getAsLong(WatchedPrograms.COLUMN_WATCH_END_TIME_UTC_MILLIS);
@@ -896,9 +896,6 @@ public class TvProvider extends ContentProvider {
             }
         }
 
-        private static final long DEFAULT_CONSOLIDATION_INTERNAL_IN_MILLIS =
-                30 * 60 * 1000; // 30 minutes
-
         // Consolidates all WatchedPrograms rows for a given session with watch end time information
         // of the most recent log entry. After this method is called, it is guaranteed that there
         // remain consolidated rows only for that session.
@@ -971,14 +968,8 @@ public class TvProvider extends ContentProvider {
                     + WatchedPrograms.COLUMN_WATCH_START_TIME_UTC_MILLIS + " DESC";
 
             int consolidatedRowCount = 0;
-            int unconsolidatedRowCount = 0;
             try (Cursor cursor = queryBuilder.query(db, projection, selection, null, null, null,
                     sortOrder)) {
-                if (cursor == null) {
-                    return;
-                }
-                unconsolidatedRowCount = cursor.getCount();
-
                 long oldWatchStartTime = 0;
                 String oldSessionToken = null;
                 while (cursor != null && cursor.moveToNext()) {
@@ -1004,14 +995,10 @@ public class TvProvider extends ContentProvider {
                     oldWatchStartTime = watchStartTime;
                 }
             }
-            unconsolidatedRowCount -= consolidatedRowCount;
-
             if (consolidatedRowCount > 0) {
                 deleteUnsearchable();
             }
-            if (unconsolidatedRowCount > 0) {
-                scheduleNext();
-            }
+            scheduleConsolidationIfNeeded();
         }
 
         // Consolidates a WatchedPrograms row.
@@ -1045,7 +1032,7 @@ public class TvProvider extends ContentProvider {
                 return 0;
             }
 
-            ContentValues values = getProgramValues(watchStartTime, channelId);
+            ContentValues values = getProgramValues(channelId, watchStartTime);
             Long endTime = values.getAsLong(WatchedPrograms.COLUMN_END_TIME_UTC_MILLIS);
             boolean needsToSplit = endTime != null && endTime < watchEndTime;
 
@@ -1056,9 +1043,9 @@ public class TvProvider extends ContentProvider {
                         String.valueOf(needsToSplit ? endTime : watchEndTime));
                 values.put(WATCHED_PROGRAMS_COLUMN_CONSOLIDATED, "1");
             }
-            int count = db.update(WATCHED_PROGRAMS_TABLE, values, WatchedPrograms._ID + "="
-                    + String.valueOf(id), null);
-
+            db.update(WATCHED_PROGRAMS_TABLE, values,
+                    WatchedPrograms._ID + "=" + String.valueOf(id), null);
+            int count = dryRun ? 0 : 1;
             if (needsToSplit) {
                 // This means that the program ended before the user stops watching the current
                 // channel. In this case we duplicate the log entry as many as the number of
@@ -1082,8 +1069,10 @@ public class TvProvider extends ContentProvider {
             db.delete(WATCHED_PROGRAMS_TABLE, deleteWhere, null);
         }
 
-        // Schedules the next consolidation.
-        private final void scheduleNext() {
+        private final void scheduleConsolidationIfNeeded() {
+            if (DEBUG) {
+                Log.d(TAG, "scheduleConsolidationIfNeeded()");
+            }
             SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
             queryBuilder.setTables(WATCHED_PROGRAMS_TABLE);
             SQLiteDatabase db = mOpenHelper.getReadableDatabase();
@@ -1097,17 +1086,13 @@ public class TvProvider extends ContentProvider {
 
             try (Cursor cursor = queryBuilder.query(db, projection, selection, null, null, null,
                     null)) {
-                if (cursor == null || !cursor.moveToNext()) {
-                    return;
-                }
-                // Find the earliest program end time and schedule the next consolidation at that
-                // time.
-                long minEndTime = Math.max(cursor.getLong(0),
-                        System.currentTimeMillis() + DEFAULT_CONSOLIDATION_INTERNAL_IN_MILLIS);
-                while (cursor.moveToNext()) {
+                // Find the earliest time that any of the currently watching programs ends and
+                // schedule the next consolidation at that time.
+                long minEndTime = Long.MAX_VALUE;
+                while (cursor != null && cursor.moveToNext()) {
                     long watchStartTime = cursor.getLong(0);
                     long channelId = cursor.getLong(1);
-                    ContentValues values = getProgramValues(watchStartTime, channelId);
+                    ContentValues values = getProgramValues(channelId, watchStartTime);
                     Long endTime = values.getAsLong(WatchedPrograms.COLUMN_END_TIME_UTC_MILLIS);
 
                     if (endTime != null && endTime < minEndTime
@@ -1115,23 +1100,20 @@ public class TvProvider extends ContentProvider {
                         minEndTime = endTime;
                     }
                 }
-                sendEmptyMessageAtTime(MSG_TRY_CONSOLIDATE_ALL, minEndTime);
-                if (DEBUG) {
-                    CharSequence minEndTimeStr = DateUtils.getRelativeTimeSpanString(minEndTime,
-                            System.currentTimeMillis(), DateUtils.SECOND_IN_MILLIS);
-                    Log.d(TAG, "MSG_CONSOLIDATE_ALL scheduled " + minEndTimeStr);
+                if (minEndTime != Long.MAX_VALUE) {
+                    sendEmptyMessageAtTime(MSG_TRY_CONSOLIDATE_ALL, minEndTime);
+                    if (DEBUG) {
+                        CharSequence minEndTimeStr = DateUtils.getRelativeTimeSpanString(
+                                minEndTime, System.currentTimeMillis(), DateUtils.SECOND_IN_MILLIS);
+                        Log.d(TAG, "onTryConsolidateAll() scheduled " + minEndTimeStr);
+                    }
                 }
             }
         }
 
         // Returns non-null ContentValues of the program data that the user watched on the channel
-        // {@code channelId} at the time {@code watchStartTime}.
-        private final ContentValues getProgramValues(long watchStartTime, long channelId) {
-            if (DEBUG) {
-                Log.d(TAG, "getProgramValues(watchStartTime=" + watchStartTime + ", channelId="
-                        + channelId + ")");
-            }
-
+        // {@code channelId} at the time {@code time}.
+        private final ContentValues getProgramValues(long channelId, long time) {
             SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
             queryBuilder.setTables(PROGRAMS_TABLE);
             SQLiteDatabase db = mOpenHelper.getReadableDatabase();
@@ -1147,8 +1129,8 @@ public class TvProvider extends ContentProvider {
                     + Programs.COLUMN_END_TIME_UTC_MILLIS + ">?";
             String[] selectionArgs = {
                     String.valueOf(channelId),
-                    String.valueOf(watchStartTime),
-                    String.valueOf(watchStartTime)
+                    String.valueOf(time),
+                    String.valueOf(time)
             };
             String sortOrder = Programs.COLUMN_START_TIME_UTC_MILLIS + " ASC";
 
@@ -1160,9 +1142,6 @@ public class TvProvider extends ContentProvider {
                     values.put(WatchedPrograms.COLUMN_START_TIME_UTC_MILLIS, cursor.getLong(1));
                     values.put(WatchedPrograms.COLUMN_END_TIME_UTC_MILLIS, cursor.getLong(2));
                     values.put(WatchedPrograms.COLUMN_DESCRIPTION, cursor.getString(3));
-                    if (DEBUG) {
-                        Log.d(TAG, "values={" + values + "}");
-                    }
                 }
                 return values;
             }
