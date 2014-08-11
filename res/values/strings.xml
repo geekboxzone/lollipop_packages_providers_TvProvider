@@ -35,18 +35,19 @@
 
     <!-- Title of an application permission, listed so the user can choose
         whether they want to allow the application to do this. -->
-    <string name="permlab_allEpgData">All EPG Data</string>
+    <string name="permlab_accessAllEpgData">Access All EPG Data</string>
     <!-- Description of an application permission, listed so the user can choose
         whether they want to allow the application to do this. -->
-    <string name="permdesc_allEpgData">Allows the app to read and write
+    <string name="permdesc_accessAllEpgData">Allows the app to read and write
         all TV channel/program data stored on your device.</string>
 
     <!-- Title of an application permission, listed so the user can choose
         whether they want to allow the application to do this. -->
-    <string name="permlab_tvWatchLog">TV Watch Log</string>
+    <string name="permlab_accessWatchedPrograms">Access Watched Programs
+    </string>
     <!-- Description of an application permission, listed so the user can choose
         whether they want to allow the application to do this. -->
-    <string name="permdesc_tvWatchLog">Allows the app to read and write the list
-        of TV programs you watched. Malicious apps may collect your private TV
-        watch history.</string>
+    <string name="permdesc_accessWatchedPrograms">Allows the app to read and
+        write the list of TV programs you watched. Malicious apps may collect
+        your private TV watch history.</string>
 </resources>

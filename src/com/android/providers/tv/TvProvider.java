@@ -225,7 +225,8 @@ public class TvProvider extends ContentProvider {
     // Mapping from broadcast genre to canonical genre.
     private static Map<String, String> sGenreMap;
 
-    private static final String PERMISSION_ALL_EPG_DATA = "android.permission.ALL_EPG_DATA";
+    private static final String PERMISSION_ACCESS_ALL_EPG_DATA =
+        "com.android.providers.tv.permission.ALL_EPG_DATA";
 
     private static class DatabaseHelper extends SQLiteOpenHelper {
         private final Context mContext;
@@ -750,7 +751,7 @@ public class TvProvider extends ContentProvider {
     }
 
     private boolean callerHasFullEpgAccess() {
-        return getContext().checkCallingOrSelfPermission(PERMISSION_ALL_EPG_DATA)
+        return getContext().checkCallingOrSelfPermission(PERMISSION_ACCESS_ALL_EPG_DATA)
                 == PackageManager.PERMISSION_GRANTED;
     }
 

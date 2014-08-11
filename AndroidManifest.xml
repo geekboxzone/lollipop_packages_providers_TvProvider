@@ -19,33 +19,33 @@
 
     <!-- Allows an application to read (but not write) the TV channel/program
          data. -->
-    <permission android:name="android.permission.READ_EPG_DATA"
+    <permission android:name="com.android.providers.tv.permission.READ_EPG_DATA"
         android:protectionLevel="dangerous"
         android:label="@string/permlab_readEpgData"
         android:description="@string/permdesc_readEpgData" />
 
     <!-- Allows an application to write (but not read) the TV channel/program
          data. -->
-    <permission android:name="android.permission.WRITE_EPG_DATA"
+    <permission android:name="com.android.providers.tv.permission.WRITE_EPG_DATA"
         android:protectionLevel="dangerous"
         android:label="@string/permlab_writeEpgData"
         android:description="@string/permdesc_writeEpgData" />
 
     <!-- Allows an application to read and write all TV channel/program data.
          @hide -->
-    <permission android:name="android.permission.ALL_EPG_DATA"
+    <permission android:name="com.android.providers.tv.permission.ACCESS_ALL_EPG_DATA"
         android:protectionLevel="signatureOrSystem"
-        android:label="@string/permlab_allEpgData"
-        android:description="@string/permdesc_allEpgData" />
+        android:label="@string/permlab_accessAllEpgData"
+        android:description="@string/permdesc_accessAllEpgData" />
 
-    <!-- Allows an application to read and write the user's TV watch log.
+    <!-- Allows an application to read and write watched programs data.
          @hide -->
-    <permission android:name="android.permission.TV_WATCH_LOG"
-        android:protectionLevel="signature"
-        android:label="@string/permlab_tvWatchLog"
-        android:description="@string/permdesc_tvWatchLog" />
+    <permission android:name="com.android.providers.tv.permission.ACCESS_WATCHED_PROGRAMS"
+        android:protectionLevel="signatureOrSystem"
+        android:label="@string/permlab_accessWatchedPrograms"
+        android:description="@string/permdesc_accessWatchedPrograms" />
 
-    <uses-permission android:name="android.permission.ALL_EPG_DATA" />
+    <uses-permission android:name="com.android.providers.tv.permission.ACCESS_ALL_EPG_DATA" />
 
     <application android:label="@string/app_label">
         <provider
@@ -53,11 +53,11 @@
             android:authorities="android.media.tv"
             android:exported="true"
             android:syncable="true"
-            android:readPermission="android.permission.READ_EPG_DATA"
-            android:writePermission="android.permission.WRITE_EPG_DATA">
+            android:readPermission="com.android.providers.tv.permission.READ_EPG_DATA"
+            android:writePermission="com.android.providers.tv.permission.WRITE_EPG_DATA">
             <path-permission
                 android:pathPrefix="/watched_program"
-                android:permission="android.permission.TV_WATCH_LOG" />
+                android:permission="com.android.providers.tv.permission.ACCESS_WATCHED_PROGRAMS" />
         </provider>
 
         <service android:name="EpgDataCleanupService" />
