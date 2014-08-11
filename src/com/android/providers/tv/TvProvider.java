@@ -116,7 +116,7 @@ public class TvProvider extends ContentProvider {
     // is consolidated or not. Unconsolidated entries may have columns with missing data.
     private static final String WATCHED_PROGRAMS_COLUMN_CONSOLIDATED = "consolidated";
 
-    private static final long MAX_PROGRAM_DATA_DELAY_IN_MILLIS = 5 * 1000; // 5 seconds
+    private static final long MAX_PROGRAM_DATA_DELAY_IN_MILLIS = 10 * 1000; // 10 seconds
 
     private static Map<String, String> sChannelProjectionMap;
     private static Map<String, String> sProgramProjectionMap;
@@ -527,7 +527,8 @@ public class TvProvider extends ContentProvider {
             long rowId = db.insert(WATCHED_PROGRAMS_TABLE, null, values);
             if (rowId > 0) {
                 mLogHandler.removeMessages(WatchLogHandler.MSG_TRY_CONSOLIDATE_ALL);
-                mLogHandler.sendEmptyMessage(WatchLogHandler.MSG_TRY_CONSOLIDATE_ALL);
+                mLogHandler.sendEmptyMessageDelayed(WatchLogHandler.MSG_TRY_CONSOLIDATE_ALL,
+                        MAX_PROGRAM_DATA_DELAY_IN_MILLIS);
                 Uri watchedProgramUri = TvContract.buildWatchedProgramUri(rowId);
                 notifyChange(watchedProgramUri);
                 return watchedProgramUri;
@@ -895,7 +896,8 @@ public class TvProvider extends ContentProvider {
             }
         }
 
-        private static final long DEFAULT_CONSOLIDATION_INTERNAL_IN_MILLIS = 30 * 60 * 1000;
+        private static final long DEFAULT_CONSOLIDATION_INTERNAL_IN_MILLIS =
+                30 * 60 * 1000; // 30 minutes
 
         // Consolidates all WatchedPrograms rows for a given session with watch end time information
         // of the most recent log entry. After this method is called, it is guaranteed that there
@@ -1191,7 +1193,7 @@ public class TvProvider extends ContentProvider {
                     ContentValues values = new ContentValues();
                     values.put(WatchedPrograms.COLUMN_PACKAGE_NAME, cursor.getString(0));
                     values.put(WatchedPrograms.COLUMN_CHANNEL_ID, cursor.getLong(1));
-                    values.put(WatchedPrograms.COLUMN_INTERNAL_SESSION_TOKEN, cursor.getString(3));
+                    values.put(WatchedPrograms.COLUMN_INTERNAL_SESSION_TOKEN, cursor.getString(2));
                     rowId = db.insert(WATCHED_PROGRAMS_TABLE, null, values);
                 }
                 return rowId;
