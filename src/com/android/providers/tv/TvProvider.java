@@ -226,7 +226,7 @@ public class TvProvider extends ContentProvider {
     private static Map<String, String> sGenreMap;
 
     private static final String PERMISSION_ACCESS_ALL_EPG_DATA =
-        "com.android.providers.tv.permission.ALL_EPG_DATA";
+            "com.android.providers.tv.permission.ACCESS_ALL_EPG_DATA";
 
     private static class DatabaseHelper extends SQLiteOpenHelper {
         private final Context mContext;
