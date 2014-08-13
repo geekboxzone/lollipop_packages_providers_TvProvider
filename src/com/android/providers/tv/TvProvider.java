@@ -530,9 +530,7 @@ public class TvProvider extends ContentProvider {
                 mLogHandler.removeMessages(WatchLogHandler.MSG_TRY_CONSOLIDATE_ALL);
                 mLogHandler.sendEmptyMessageDelayed(WatchLogHandler.MSG_TRY_CONSOLIDATE_ALL,
                         MAX_PROGRAM_DATA_DELAY_IN_MILLIS);
-                Uri watchedProgramUri = TvContract.buildWatchedProgramUri(rowId);
-                notifyChange(watchedProgramUri);
-                return watchedProgramUri;
+                return TvContract.buildWatchedProgramUri(rowId);
             }
             throw new SQLException("Failed to insert row into " + uri);
         } else if (watchStartTime == null && watchEndTime != null) {
@@ -1054,9 +1052,15 @@ public class TvProvider extends ContentProvider {
                 values.put(WatchedPrograms.COLUMN_WATCH_END_TIME_UTC_MILLIS,
                         String.valueOf(needsToSplit ? endTime : watchEndTime));
                 values.put(WATCHED_PROGRAMS_COLUMN_CONSOLIDATED, "1");
+                db.update(WATCHED_PROGRAMS_TABLE, values,
+                        WatchedPrograms._ID + "=" + String.valueOf(id), null);
+                // Treat the watched program is inserted when WATCHED_PROGRAMS_COLUMN_CONSOLIDATED
+                // becomes 1.
+                notifyChange(TvContract.buildWatchedProgramUri(id));
+            } else {
+                db.update(WATCHED_PROGRAMS_TABLE, values,
+                        WatchedPrograms._ID + "=" + String.valueOf(id), null);
             }
-            db.update(WATCHED_PROGRAMS_TABLE, values,
-                    WatchedPrograms._ID + "=" + String.valueOf(id), null);
             int count = dryRun ? 0 : 1;
             if (needsToSplit) {
                 // This means that the program ended before the user stops watching the current
