@@ -429,7 +429,7 @@ public class TvProvider extends ContentProvider {
     public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs,
             String sortOrder) {
         if (needsToLimitPackage(uri) && !TextUtils.isEmpty(sortOrder)) {
-            throw new IllegalArgumentException("Sort order not allowed for " + uri);
+            throw new SecurityException("Sort order not allowed for " + uri);
         }
         SqlParams params = createSqlParams(OP_QUERY, uri, selection, selectionArgs);
 
@@ -562,7 +562,12 @@ public class TvProvider extends ContentProvider {
     @Override
     public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
         SqlParams params = createSqlParams(OP_UPDATE, uri, selection, selectionArgs);
-        if (params.getTables().equals(PROGRAMS_TABLE)) {
+        if (params.getTables().equals(CHANNELS_TABLE)) {
+            if (values.containsKey(Channels.COLUMN_LOCKED)
+                    && !callerHasModifyParentalControlsPermission()) {
+                throw new SecurityException("Not allowed to modify Channels.COLUMN_LOCKED");
+            }
+        } else if (params.getTables().equals(PROGRAMS_TABLE)) {
             checkAndConvertGenre(values);
         }
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
@@ -579,7 +584,7 @@ public class TvProvider extends ContentProvider {
         SqlParams params = new SqlParams(null, selection, selectionArgs);
         if (needsToLimitPackage(uri)) {
             if (!TextUtils.isEmpty(selection)) {
-                throw new IllegalArgumentException("Selection not allowed for " + uri);
+                throw new SecurityException("Selection not allowed for " + uri);
             }
             params.setWhere(BaseTvColumns.COLUMN_PACKAGE_NAME + "=?", getCallingPackage_());
         }
@@ -590,7 +595,7 @@ public class TvProvider extends ContentProvider {
                     params.setTables(CHANNELS_TABLE);
                 } else {
                     if (!operation.equals(OP_QUERY)) {
-                        throw new IllegalArgumentException(capitalize(operation)
+                        throw new SecurityException(capitalize(operation)
                                 + " not allowed for " + uri);
                     }
                     if (!Genres.isCanonical(genre)) {
@@ -747,11 +752,17 @@ public class TvProvider extends ContentProvider {
         // user's watch log is treated separately with a special permission.
         int match = sUriMatcher.match(uri);
         return match != MATCH_WATCHED_PROGRAM && match != MATCH_WATCHED_PROGRAM_ID
-                && !callerHasFullEpgAccess();
+                && !callerHasAccessAllEpgDataPermission();
     }
 
-    private boolean callerHasFullEpgAccess() {
+    private boolean callerHasAccessAllEpgDataPermission() {
         return getContext().checkCallingOrSelfPermission(PERMISSION_ACCESS_ALL_EPG_DATA)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean callerHasModifyParentalControlsPermission() {
+        return getContext().checkCallingOrSelfPermission(
+                android.Manifest.permission.MODIFY_PARENTAL_CONTROLS)
                 == PackageManager.PERMISSION_GRANTED;
     }
 
@@ -770,7 +781,7 @@ public class TvProvider extends ContentProvider {
 
         SqlParams params = new SqlParams(CHANNELS_TABLE, Channels._ID + "=?",
                 String.valueOf(channelId));
-        if (!callerHasFullEpgAccess()) {
+        if (!callerHasAccessAllEpgDataPermission()) {
             params.appendWhere(Channels.COLUMN_PACKAGE_NAME + "=?", getCallingPackage_());
         }
 
