@@ -759,9 +759,11 @@ public class TvProvider extends ContentProvider {
     }
 
     private boolean callerHasModifyParentalControlsPermission() {
-        return getContext().checkCallingOrSelfPermission(
-                android.Manifest.permission.MODIFY_PARENTAL_CONTROLS)
-                == PackageManager.PERMISSION_GRANTED;
+        return true;
+        // STOPSHIP: Uncomment when b/16984416 is resolved.
+        //return getContext().checkCallingOrSelfPermission(
+        //        android.Manifest.permission.MODIFY_PARENTAL_CONTROLS)
+        //        == PackageManager.PERMISSION_GRANTED;
     }
 
     @Override
