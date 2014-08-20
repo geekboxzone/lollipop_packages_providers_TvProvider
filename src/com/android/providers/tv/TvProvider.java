@@ -381,7 +381,7 @@ public class TvProvider extends ContentProvider {
         sGenreMap = new HashMap<String, String>();
         buildGenreMap(R.array.genre_mapping_atsc);
         buildGenreMap(R.array.genre_mapping_dvb);
-        // TODO: Map ISDB genre
+        buildGenreMap(R.array.genre_mapping_isdb);
     }
 
     @SuppressLint("DefaultLocale")

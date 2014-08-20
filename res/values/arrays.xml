@@ -243,4 +243,82 @@
         <item>unpublished|OTHERS</item>
         <item>live broadcast|OTHERS</item>
     </string-array>
+
+    <!-- Category mapping from ISDB to canonical genre -->
+    <string-array name="genre_mapping_isdb">
+        <item>Animation|MOVIES</item>
+        <item>Baseball|SPORTS</item>
+        <item>Children\'s song|MUSIC</item>
+        <item>Classic, opera|MUSIC</item>
+        <item>Cocking variety|ENTERTAINMENT</item>
+        <item>Comedy program|ENTERTAINMENT</item>
+        <item>Comic story, Entertainment|ENTERTAINMENT</item>
+        <item>Computer, TV games|TECH_SCIENCE</item>
+        <item>Conversation, languages|EDUCATION</item>
+        <item>Dance, Ballet|ENTERTAINMENT</item>
+        <item>Discussion, conference|NEWS</item>
+        <item>Economics, market report|NEWS</item>
+        <item>Educational problem|EDUCATION</item>
+        <item>Events|ENTERTAINMENT</item>
+        <item>Fashion|LIFE_STYLE</item>
+        <item>Folk music, world music|MUSIC</item>
+        <item>Game|GAMING</item>
+        <item>Gardening, pet, handicrafts|LIFE_STYLE</item>
+        <item>Golf|SPORTS</item>
+        <item>Gossip/tabloid show|ENTERTAINMENT</item>
+        <item>Gourmet, cocking|LIFE_STYLE</item>
+        <item>Health, medical treatment|LIFE_STYLE</item>
+        <item>Hobby/Education|LIFE_STYLE</item>
+        <item>Horse race, public race|SPORTS</item>
+        <item>Japanese animation|FAMILY_KIDS</item>
+        <item>Japanese ballad, Japanese traditional music|MUSIC</item>
+        <item>Japanese chess (shogi) and "go"|GAMING</item>
+        <item>Japanese dramas|DRAMA</item>
+        <item>Japanese movies|MOVIES</item>
+        <item>Japanese rock, pop music|MUSIC</item>
+        <item>Jazz, fusion|MUSIC</item>
+        <item>Junior high school and high school students|EDUCATION</item>
+        <item>Kabuki, Classical drama|DRAMA</item>
+        <item>Karaoke, amateur singing contests|MUSIC</item>
+        <item>Lifelong education, qualifications|EDUCATION</item>
+        <item>Little children, schoolchildren|EDUCATION</item>
+        <item>Live concernt|MUSIC</item>
+        <item>Living, home|LIFE_STYLE</item>
+        <item>Local program|NEWS</item>
+        <item>Mah-jong, pinball games|GAMING</item>
+        <item>Marathon, athletic sports, swimming|SPORTS</item>
+        <item>Marine sports, winter sports|SPORTS</item>
+        <item>Modern drama, Western-style drama|DRAMA</item>
+        <item>Motor sports|SPORTS</item>
+        <item>Musical|MUSIC</item>
+        <item>Music, art, industrial art|ARTS</item>
+        <item>Music variety|ENTERTAINMENT</item>
+        <item>News analysis|NEWS</item>
+        <item>Olympic, international games|SPORTS</item>
+        <item>Other ball games|SPORTS</item>
+        <item>Overseas animation|FAMILY_KIDS</item>
+        <item>Overseas dramas|DRAMA</item>
+        <item>Overseas, international report|NEWS</item>
+        <item>Overseas movies|MOVIES</item>
+        <item>Overseas rock, pop music|MUSIC</item>
+        <item>Period dramas|DRAMA</item>
+        <item>Politics, national assembly|NEWS</item>
+        <item>Popular songs, Japanese popular songs (enka songs)|MUSIC</item>
+        <item>Quiz|GAMING</item>
+        <item>Rankng, request music|MUSIC</item>
+        <item>Regular, general|NEWS</item>
+        <item>Shopping, mail-order business|SHOPPING</item>
+        <item>Soccer|SPORTS</item>
+        <item>Special effects|FAMILY_KIDS</item>
+        <item>Special program, documentary|NEWS</item>
+        <item>Special report|NEWS</item>
+        <item>Sports news|SPORTS</item>
+        <item>Sumo, combative sports|SPORTS</item>
+        <item>Talk variety|ENTERTAINMENT</item>
+        <item>Tour variety|ENTERTAINMENT</item>
+        <item>Traffic report|NEWS</item>
+        <item>Trip, fishing, outdoor entertainment|ANIMAL_WILDLIFE</item>
+        <item>University students, examinations|EDUCATION</item>
+        <item>Weather report|NEWS</item>
+    </string-array>
 </resources>
