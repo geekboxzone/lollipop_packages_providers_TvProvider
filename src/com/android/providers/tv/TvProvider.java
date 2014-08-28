@@ -261,7 +261,7 @@ public class TvProvider extends ContentProvider {
                     + Channels.COLUMN_NETWORK_AFFILIATION + " TEXT,"
                     + Channels.COLUMN_DESCRIPTION + " TEXT,"
                     + Channels.COLUMN_VIDEO_FORMAT + " TEXT,"
-                    + Channels.COLUMN_BROWSABLE + " INTEGER NOT NULL DEFAULT 1,"
+                    + Channels.COLUMN_BROWSABLE + " INTEGER NOT NULL DEFAULT 0,"
                     + Channels.COLUMN_SEARCHABLE + " INTEGER NOT NULL DEFAULT 1,"
                     + Channels.COLUMN_LOCKED + " INTEGER NOT NULL DEFAULT 0,"
                     + Channels.COLUMN_INTERNAL_PROVIDER_DATA + " BLOB,"
