@@ -83,7 +83,7 @@ public class TvProvider extends ContentProvider {
     private static final String OP_UPDATE = "update";
     private static final String OP_DELETE = "delete";
 
-    private static final int DATABASE_VERSION = 17;
+    private static final int DATABASE_VERSION = 18;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
@@ -253,9 +253,9 @@ public class TvProvider extends ContentProvider {
                     + Channels.COLUMN_INPUT_ID + " TEXT NOT NULL,"
                     + Channels.COLUMN_TYPE + " INTEGER NOT NULL DEFAULT 0,"
                     + Channels.COLUMN_SERVICE_TYPE + " INTEGER NOT NULL DEFAULT 1,"
-                    + Channels.COLUMN_ORIGINAL_NETWORK_ID + " INTEGER,"
-                    + Channels.COLUMN_TRANSPORT_STREAM_ID + " INTEGER,"
-                    + Channels.COLUMN_SERVICE_ID + " INTEGER,"
+                    + Channels.COLUMN_ORIGINAL_NETWORK_ID + " INTEGER NOT NULL DEFAULT 0,"
+                    + Channels.COLUMN_TRANSPORT_STREAM_ID + " INTEGER NOT NULL DEFAULT 0,"
+                    + Channels.COLUMN_SERVICE_ID + " INTEGER NOT NULL DEFAULT 0,"
                     + Channels.COLUMN_DISPLAY_NUMBER + " TEXT,"
                     + Channels.COLUMN_DISPLAY_NAME + " TEXT,"
                     + Channels.COLUMN_NETWORK_AFFILIATION + " TEXT,"
@@ -267,7 +267,11 @@ public class TvProvider extends ContentProvider {
                     + Channels.COLUMN_INTERNAL_PROVIDER_DATA + " BLOB,"
                     + CHANNELS_COLUMN_LOGO + " BLOB,"
                     + Channels.COLUMN_VERSION_NUMBER + " INTEGER,"
-                    + "UNIQUE(" + Channels._ID + "," + Channels.COLUMN_PACKAGE_NAME + ")"
+                    + "UNIQUE(" + Channels._ID + "," + Channels.COLUMN_PACKAGE_NAME + "),"
+                    + "UNIQUE(" + Channels.COLUMN_INPUT_ID + ","
+                            + Channels.COLUMN_ORIGINAL_NETWORK_ID + ","
+                            + Channels.COLUMN_TRANSPORT_STREAM_ID + ","
+                            + Channels.COLUMN_SERVICE_ID + ")"
                     + ");");
             db.execSQL("CREATE TABLE " + PROGRAMS_TABLE + " ("
                     + Programs._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
