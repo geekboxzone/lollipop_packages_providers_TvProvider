@@ -83,11 +83,14 @@ public class TvProvider extends ContentProvider {
     private static final String OP_UPDATE = "update";
     private static final String OP_DELETE = "delete";
 
-    private static final int DATABASE_VERSION = 18;
+    private static final int DATABASE_VERSION = 19;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
     private static final String WATCHED_PROGRAMS_TABLE = "watched_programs";
+    // This table stores deleted locked channels, so that when the same channel is added back,
+    // TvProvider can restore the locked state.
+    private static final String DELETED_LOCKED_CHANNELS_TABLE = "deleted_locked_channels";
     private static final String DEFAULT_CHANNELS_SORT_ORDER = Channels.COLUMN_DISPLAY_NUMBER
             + " ASC";
     private static final String DEFAULT_PROGRAMS_SORT_ORDER = Programs.COLUMN_START_TIME_UTC_MILLIS
@@ -323,6 +326,15 @@ public class TvProvider extends ContentProvider {
                             + Channels._ID + "," + Channels.COLUMN_PACKAGE_NAME
                             + ") ON UPDATE CASCADE ON DELETE CASCADE"
                     + ");");
+            db.execSQL("CREATE TABLE " + DELETED_LOCKED_CHANNELS_TABLE + " ("
+                    + Channels.COLUMN_INPUT_ID + " TEXT NOT NULL,"
+                    + Channels.COLUMN_ORIGINAL_NETWORK_ID + " INTEGER NOT NULL,"
+                    + Channels.COLUMN_TRANSPORT_STREAM_ID + " INTEGER NOT NULL,"
+                    + Channels.COLUMN_SERVICE_ID + " INTEGER NOT NULL,"
+                    + "UNIQUE(" + Channels.COLUMN_INPUT_ID + ","
+                    + Channels.COLUMN_ORIGINAL_NETWORK_ID + ","
+                    + Channels.COLUMN_TRANSPORT_STREAM_ID + "," + Channels.COLUMN_SERVICE_ID + ")"
+                    + ");");
         }
 
         @Override
@@ -332,6 +344,7 @@ public class TvProvider extends ContentProvider {
             }
 
             // Default upgrade case.
+            db.execSQL("DROP TABLE IF EXISTS " + DELETED_LOCKED_CHANNELS_TABLE);
             db.execSQL("DROP TABLE IF EXISTS " + WATCHED_PROGRAMS_TABLE);
             db.execSQL("DROP TABLE IF EXISTS " + PROGRAMS_TABLE);
             db.execSQL("DROP TABLE IF EXISTS " + CHANNELS_TABLE);
@@ -356,7 +369,7 @@ public class TvProvider extends ContentProvider {
     @Override
     public boolean onCreate() {
         if (DEBUG) {
-          Log.d(TAG, "Creating TvProvider");
+            Log.d(TAG, "Creating TvProvider");
         }
         mOpenHelper = new DatabaseHelper(getContext());
         deleteUnconsolidatedWatchedProgramsRows();
@@ -486,11 +499,44 @@ public class TvProvider extends ContentProvider {
         }
     }
 
+    private static void restoreLockedStateIfNecessary(SQLiteDatabase db, ContentValues values) {
+        String inputId = values.getAsString(Channels.COLUMN_INPUT_ID);
+        Integer onid = values.getAsInteger(Channels.COLUMN_ORIGINAL_NETWORK_ID);
+        Integer tsid = values.getAsInteger(Channels.COLUMN_TRANSPORT_STREAM_ID);
+        Integer serviceId = values.getAsInteger(Channels.COLUMN_SERVICE_ID);
+        if (onid == null) { onid = 0; }
+        if (tsid == null) { tsid = 0; }
+        if (serviceId == null) { serviceId = 0; }
+
+        SqlParams params = new SqlParams(DELETED_LOCKED_CHANNELS_TABLE,
+                "(" + Channels.COLUMN_INPUT_ID + "=?) AND ("
+                + Channels.COLUMN_ORIGINAL_NETWORK_ID + "=?) AND ("
+                + Channels.COLUMN_TRANSPORT_STREAM_ID + "=?) AND ("
+                + Channels.COLUMN_SERVICE_ID + "=?)",
+                inputId, Integer.toString(onid), Integer.toString(tsid),
+                Integer.toString(serviceId));
+
+        SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
+        queryBuilder.setTables(params.getTables());
+        boolean locked = false;
+        try (Cursor cursor = queryBuilder.query(db, new String[] { Channels.COLUMN_INPUT_ID },
+                params.getSelection(), params.getSelectionArgs(), null, null, null)) {
+            if (cursor != null && cursor.getCount() > 0) {
+                locked = true;
+            }
+        }
+        if (locked) {
+            values.put(Channels.COLUMN_LOCKED, 1);
+            db.delete(params.getTables(), params.getSelection(), params.getSelectionArgs());
+        }
+    }
+
     private Uri insertChannel(Uri uri, ContentValues values) {
         // Mark the owner package of this channel.
         values.put(Channels.COLUMN_PACKAGE_NAME, getCallingPackage_());
 
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+        restoreLockedStateIfNecessary(db, values);
         long rowId = db.insert(CHANNELS_TABLE, null, values);
         if (rowId > 0) {
             Uri channelUri = TvContract.buildChannelUri(rowId);
@@ -550,10 +596,38 @@ public class TvProvider extends ContentProvider {
                 + " COLUMN_WATCH_END_TIME_UTC_MILLIS should be specified");
     }
 
+    private static void storeLockedChannelsIfNecessary(SqlParams params, SQLiteDatabase db) {
+        String selection = params.getSelection();
+        if (TextUtils.isEmpty(selection)) {
+            selection = "(" + Channels.COLUMN_LOCKED + "=1)";
+        } else {
+            selection += " AND (" + Channels.COLUMN_LOCKED + "=1)";
+        }
+        SqlParams newParams = new SqlParams(CHANNELS_TABLE, selection, params.getSelectionArgs());
+        SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
+        queryBuilder.setTables(newParams.getTables());
+        try (Cursor cursor = queryBuilder.query(db,
+                new String[] { Channels.COLUMN_INPUT_ID, Channels.COLUMN_ORIGINAL_NETWORK_ID,
+                Channels.COLUMN_TRANSPORT_STREAM_ID, Channels.COLUMN_SERVICE_ID },
+                newParams.getSelection(), newParams.getSelectionArgs(), null, null, null)) {
+            ContentValues values = new ContentValues();
+            while (cursor != null && cursor.moveToNext()) {
+                values.put(Channels.COLUMN_INPUT_ID, cursor.getString(0));
+                values.put(Channels.COLUMN_ORIGINAL_NETWORK_ID, cursor.getInt(1));
+                values.put(Channels.COLUMN_TRANSPORT_STREAM_ID, cursor.getInt(2));
+                values.put(Channels.COLUMN_SERVICE_ID, cursor.getInt(3));
+                db.insert(DELETED_LOCKED_CHANNELS_TABLE, null, values);
+            }
+        }
+    }
+
     @Override
     public int delete(Uri uri, String selection, String[] selectionArgs) {
         SqlParams params = createSqlParams(OP_DELETE, uri, selection, selectionArgs);
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+        if (params.getTables().equals(CHANNELS_TABLE)) {
+            storeLockedChannelsIfNecessary(params, db);
+        }
         int count = db.delete(params.getTables(), params.getSelection(), params.getSelectionArgs());
         if (count > 0) {
             notifyChange(uri);
