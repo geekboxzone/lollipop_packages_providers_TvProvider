@@ -46,6 +46,7 @@
         android:description="@string/permdesc_accessWatchedPrograms" />
 
     <uses-permission android:name="com.android.providers.tv.permission.ACCESS_ALL_EPG_DATA" />
+    <uses-permission android:name="com.android.providers.tv.permission.ACCESS_WATCHED_PROGRAMS" />
 
     <application android:label="@string/app_label">
         <provider
@@ -54,11 +55,7 @@
             android:exported="true"
             android:syncable="true"
             android:readPermission="com.android.providers.tv.permission.READ_EPG_DATA"
-            android:writePermission="com.android.providers.tv.permission.WRITE_EPG_DATA">
-            <path-permission
-                android:pathPrefix="/watched_program"
-                android:permission="com.android.providers.tv.permission.ACCESS_WATCHED_PROGRAMS" />
-        </provider>
+            android:writePermission="com.android.providers.tv.permission.WRITE_EPG_DATA" />
 
         <service android:name="EpgDataCleanupService" />
     </application>

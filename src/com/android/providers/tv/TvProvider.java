@@ -74,8 +74,7 @@ import java.util.Set;
  * {@link android.media.tv.TvContract}.
  */
 public class TvProvider extends ContentProvider {
-    // STOPSHIP: Turn debugging off.
-    private static final boolean DEBUG = true;
+    private static final boolean DEBUG = false;
     private static final String TAG = "TvProvider";
 
     // Operation names for createSqlParams().
@@ -230,6 +229,9 @@ public class TvProvider extends ContentProvider {
 
     private static final String PERMISSION_ACCESS_ALL_EPG_DATA =
             "com.android.providers.tv.permission.ACCESS_ALL_EPG_DATA";
+
+    private static final String PERMISSION_ACCESS_WATCHED_PROGRAMS =
+            "com.android.providers.tv.permission.ACCESS_WATCHED_PROGRAMS";
 
     private static class DatabaseHelper extends SQLiteOpenHelper {
         private final Context mContext;
@@ -520,7 +522,6 @@ public class TvProvider extends ContentProvider {
 
         SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
         queryBuilder.setTables(params.getTables());
-        boolean locked = false;
         final String[] projection = { Channels.COLUMN_LOCKED, Channels.COLUMN_BROWSABLE };
         try (Cursor cursor = queryBuilder.query(db, projection, params.getSelection(),
                 params.getSelectionArgs(), null, null, null)) {
@@ -822,18 +823,28 @@ public class TvProvider extends ContentProvider {
         }
     }
 
+    // When an application tries to create/read/update/delete channel or program data, we need to
+    // ensure that such an access is limited to the data entries it owns, unless it has the full
+    // access permission.
+    // Note that the user's watch log is treated with more caution and we should block any access
+    // from an application that doesn't have the proper permission.
     private boolean needsToLimitPackage(Uri uri) {
-        // If an application is trying to access channel or program data, we need to ensure that the
-        // access is limited to only those data entries that the application provided in the first
-        // place. The only exception is when the application has the full data access. Note that the
-        // user's watch log is treated separately with a special permission.
         int match = sUriMatcher.match(uri);
-        return match != MATCH_WATCHED_PROGRAM && match != MATCH_WATCHED_PROGRAM_ID
-                && !callerHasAccessAllEpgDataPermission();
+        if (match == MATCH_WATCHED_PROGRAM || match == MATCH_WATCHED_PROGRAM_ID) {
+            if (!callerHasAccessWatchedProgramsPermission()) {
+                throw new SecurityException("Access not allowed for " + uri);
+            }
+        }
+        return !callerHasAccessAllEpgDataPermission();
     }
 
     private boolean callerHasAccessAllEpgDataPermission() {
         return getContext().checkCallingOrSelfPermission(PERMISSION_ACCESS_ALL_EPG_DATA)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private boolean callerHasAccessWatchedProgramsPermission() {
+        return getContext().checkCallingOrSelfPermission(PERMISSION_ACCESS_WATCHED_PROGRAMS)
                 == PackageManager.PERMISSION_GRANTED;
     }
 

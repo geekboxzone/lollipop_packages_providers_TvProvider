@@ -18,7 +18,7 @@
     <integer name="max_program_age_in_days">14</integer>
 
     <!-- Maximum age of watch history in days. 0 means forever. -->
-    <integer name="max_watched_program_age_in_days">0</integer>
+    <integer name="max_watched_program_age_in_days">90</integer>
 
     <!-- Maximum number of entries for watch history. 0 means infinite. -->
     <integer name="max_watched_program_entry_count">10000</integer>
