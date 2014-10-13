@@ -82,7 +82,7 @@ public class TvProvider extends ContentProvider {
     private static final String OP_UPDATE = "update";
     private static final String OP_DELETE = "delete";
 
-    private static final int DATABASE_VERSION = 21;
+    private static final int DATABASE_VERSION = 22;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
@@ -90,6 +90,10 @@ public class TvProvider extends ContentProvider {
     // This table stores deleted channels, so that when the same channel is added back,
     // TvProvider can restore the locked & browsable state.
     private static final String DELETED_CHANNELS_TABLE = "deleted_channels";
+    private static final String PROGRAMS_TABLE_PACKAGE_NAME_INDEX = "programs_package_name_index";
+    private static final String PROGRAMS_TABLE_CHANNEL_ID_INDEX = "programs_channel_id_index";
+    private static final String PROGRAMS_TABLE_START_TIME_INDEX = "programs_start_time_index";
+    private static final String PROGRAMS_TABLE_END_TIME_INDEX = "programs_end_time_index";
     private static final String DEFAULT_CHANNELS_SORT_ORDER = Channels.COLUMN_DISPLAY_NUMBER
             + " ASC";
     private static final String DEFAULT_PROGRAMS_SORT_ORDER = Programs.COLUMN_START_TIME_UTC_MILLIS
@@ -307,6 +311,14 @@ public class TvProvider extends ContentProvider {
                             + Channels._ID + "," + Channels.COLUMN_PACKAGE_NAME
                             + ") ON UPDATE CASCADE ON DELETE CASCADE"
                     + ");");
+            db.execSQL("CREATE INDEX " + PROGRAMS_TABLE_PACKAGE_NAME_INDEX + " on " + PROGRAMS_TABLE
+                    + "(" + Programs.COLUMN_PACKAGE_NAME + ");");
+            db.execSQL("CREATE INDEX " + PROGRAMS_TABLE_CHANNEL_ID_INDEX + " on " + PROGRAMS_TABLE
+                    + "(" + Programs.COLUMN_CHANNEL_ID + ");");
+            db.execSQL("CREATE INDEX " + PROGRAMS_TABLE_START_TIME_INDEX + " on " + PROGRAMS_TABLE
+                    + "(" + Programs.COLUMN_START_TIME_UTC_MILLIS + ");");
+            db.execSQL("CREATE INDEX " + PROGRAMS_TABLE_END_TIME_INDEX + " on " + PROGRAMS_TABLE
+                    + "(" + Programs.COLUMN_END_TIME_UTC_MILLIS + ");");
             db.execSQL("CREATE TABLE " + WATCHED_PROGRAMS_TABLE + " ("
                     + WatchedPrograms._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
                     + WatchedPrograms.COLUMN_PACKAGE_NAME + " TEXT NOT NULL,"
@@ -344,26 +356,44 @@ public class TvProvider extends ContentProvider {
 
         @Override
         public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-            if (DEBUG) {
-                Log.d(TAG, "Upgrading database from " + oldVersion + " to " + newVersion);
-            }
+            if (oldVersion < 21) {
+                Log.i(TAG, "Upgrading from version " + oldVersion + " to " + newVersion
+                    + ", data will be lost!");
+                db.execSQL("DROP TABLE IF EXISTS " + DELETED_CHANNELS_TABLE);
+                db.execSQL("DROP TABLE IF EXISTS " + WATCHED_PROGRAMS_TABLE);
+                db.execSQL("DROP TABLE IF EXISTS " + PROGRAMS_TABLE);
+                db.execSQL("DROP TABLE IF EXISTS " + CHANNELS_TABLE);
 
-            // Default upgrade case.
-            db.execSQL("DROP TABLE IF EXISTS " + DELETED_CHANNELS_TABLE);
-            db.execSQL("DROP TABLE IF EXISTS " + WATCHED_PROGRAMS_TABLE);
-            db.execSQL("DROP TABLE IF EXISTS " + PROGRAMS_TABLE);
-            db.execSQL("DROP TABLE IF EXISTS " + CHANNELS_TABLE);
-
-            // Clear legacy logo directory
-            File logoPath = new File(mContext.getFilesDir(), "logo");
-            if (logoPath.exists()) {
-                for (File file : logoPath.listFiles()) {
-                    file.delete();
+                // Clear legacy logo directory
+                File logoPath = new File(mContext.getFilesDir(), "logo");
+                if (logoPath.exists()) {
+                    for (File file : logoPath.listFiles()) {
+                        file.delete();
+                    }
+                    logoPath.delete();
                 }
-                logoPath.delete();
+
+                onCreate(db);
+                return;
             }
 
-            onCreate(db);
+            Log.i(TAG, "Upgrading from version " + oldVersion + " to " + newVersion);
+            if (oldVersion == 21) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS " + PROGRAMS_TABLE_PACKAGE_NAME_INDEX
+                        + " on " + PROGRAMS_TABLE + "(" + Programs.COLUMN_PACKAGE_NAME + ");");
+                db.execSQL("CREATE INDEX IF NOT EXISTS " + PROGRAMS_TABLE_CHANNEL_ID_INDEX + " on "
+                        + PROGRAMS_TABLE + "(" + Programs.COLUMN_CHANNEL_ID + ");");
+                db.execSQL("CREATE INDEX IF NOT EXISTS " + PROGRAMS_TABLE_START_TIME_INDEX + " on "
+                        + PROGRAMS_TABLE + "(" + Programs.COLUMN_START_TIME_UTC_MILLIS + ");");
+                db.execSQL("CREATE INDEX IF NOT EXISTS " + PROGRAMS_TABLE_END_TIME_INDEX + " on "
+                        + PROGRAMS_TABLE + "(" + Programs.COLUMN_END_TIME_UTC_MILLIS + ");");
+                oldVersion++;
+            }
+
+            if (oldVersion != newVersion) {
+                throw new IllegalStateException("error in upgrading the database to version "
+                        + newVersion);
+            }
         }
     }
 
