@@ -82,7 +82,7 @@ public class TvProvider extends ContentProvider {
     private static final String OP_UPDATE = "update";
     private static final String OP_DELETE = "delete";
 
-    private static final int DATABASE_VERSION = 20;
+    private static final int DATABASE_VERSION = 21;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
@@ -256,8 +256,9 @@ public class TvProvider extends ContentProvider {
                     + Channels._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
                     + Channels.COLUMN_PACKAGE_NAME + " TEXT NOT NULL,"
                     + Channels.COLUMN_INPUT_ID + " TEXT NOT NULL,"
-                    + Channels.COLUMN_TYPE + " INTEGER NOT NULL DEFAULT 0,"
-                    + Channels.COLUMN_SERVICE_TYPE + " INTEGER NOT NULL DEFAULT 1,"
+                    + Channels.COLUMN_TYPE + " TEXT NOT NULL DEFAULT '" + Channels.TYPE_OTHER + "',"
+                    + Channels.COLUMN_SERVICE_TYPE + " TEXT NOT NULL DEFAULT '"
+                    + Channels.SERVICE_TYPE_AUDIO_VIDEO + "',"
                     + Channels.COLUMN_ORIGINAL_NETWORK_ID + " INTEGER NOT NULL DEFAULT 0,"
                     + Channels.COLUMN_TRANSPORT_STREAM_ID + " INTEGER NOT NULL DEFAULT 0,"
                     + Channels.COLUMN_SERVICE_ID + " INTEGER NOT NULL DEFAULT 0,"
