@@ -815,6 +815,26 @@ public class TvProvider extends ContentProvider {
         }
     }
 
+    @Override
+    public int bulkInsert(Uri uri, ContentValues[] values) {
+        setBatchNotificationsSet(Sets.<Uri>newHashSet());
+        Context context = getContext();
+        SQLiteDatabase db = mOpenHelper.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            int result = super.bulkInsert(uri, values);
+            db.setTransactionSuccessful();
+            return result;
+        } finally {
+            db.endTransaction();
+            final Set<Uri> notifications = getBatchNotificationsSet();
+            setBatchNotificationsSet(null);
+            for (final Uri notificationUri : notifications) {
+                context.getContentResolver().notifyChange(notificationUri, null);
+            }
+        }
+    }
+
     private void notifyChange(Uri uri) {
         final Set<Uri> batchNotifications = getBatchNotificationsSet();
         if (batchNotifications != null) {
