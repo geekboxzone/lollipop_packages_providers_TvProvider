@@ -94,6 +94,8 @@ public class TvProvider extends ContentProvider {
     private static final String PROGRAMS_TABLE_CHANNEL_ID_INDEX = "programs_channel_id_index";
     private static final String PROGRAMS_TABLE_START_TIME_INDEX = "programs_start_time_index";
     private static final String PROGRAMS_TABLE_END_TIME_INDEX = "programs_end_time_index";
+    private static final String WATCHED_PROGRAMS_TABLE_CHANNEL_ID_INDEX =
+            "watched_programs_channel_id_index";
     private static final String DEFAULT_CHANNELS_SORT_ORDER = Channels.COLUMN_DISPLAY_NUMBER
             + " ASC";
     private static final String DEFAULT_PROGRAMS_SORT_ORDER = Programs.COLUMN_START_TIME_UTC_MILLIS
@@ -311,13 +313,13 @@ public class TvProvider extends ContentProvider {
                             + Channels._ID + "," + Channels.COLUMN_PACKAGE_NAME
                             + ") ON UPDATE CASCADE ON DELETE CASCADE"
                     + ");");
-            db.execSQL("CREATE INDEX " + PROGRAMS_TABLE_PACKAGE_NAME_INDEX + " on " + PROGRAMS_TABLE
+            db.execSQL("CREATE INDEX " + PROGRAMS_TABLE_PACKAGE_NAME_INDEX + " ON " + PROGRAMS_TABLE
                     + "(" + Programs.COLUMN_PACKAGE_NAME + ");");
-            db.execSQL("CREATE INDEX " + PROGRAMS_TABLE_CHANNEL_ID_INDEX + " on " + PROGRAMS_TABLE
+            db.execSQL("CREATE INDEX " + PROGRAMS_TABLE_CHANNEL_ID_INDEX + " ON " + PROGRAMS_TABLE
                     + "(" + Programs.COLUMN_CHANNEL_ID + ");");
-            db.execSQL("CREATE INDEX " + PROGRAMS_TABLE_START_TIME_INDEX + " on " + PROGRAMS_TABLE
+            db.execSQL("CREATE INDEX " + PROGRAMS_TABLE_START_TIME_INDEX + " ON " + PROGRAMS_TABLE
                     + "(" + Programs.COLUMN_START_TIME_UTC_MILLIS + ");");
-            db.execSQL("CREATE INDEX " + PROGRAMS_TABLE_END_TIME_INDEX + " on " + PROGRAMS_TABLE
+            db.execSQL("CREATE INDEX " + PROGRAMS_TABLE_END_TIME_INDEX + " ON " + PROGRAMS_TABLE
                     + "(" + Programs.COLUMN_END_TIME_UTC_MILLIS + ");");
             db.execSQL("CREATE TABLE " + WATCHED_PROGRAMS_TABLE + " ("
                     + WatchedPrograms._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -341,6 +343,8 @@ public class TvProvider extends ContentProvider {
                             + Channels._ID + "," + Channels.COLUMN_PACKAGE_NAME
                             + ") ON UPDATE CASCADE ON DELETE CASCADE"
                     + ");");
+            db.execSQL("CREATE INDEX " + WATCHED_PROGRAMS_TABLE_CHANNEL_ID_INDEX + " ON "
+                    + WATCHED_PROGRAMS_TABLE + "(" + WatchedPrograms.COLUMN_CHANNEL_ID + ");");
             db.execSQL("CREATE TABLE " + DELETED_CHANNELS_TABLE + " ("
                     + Channels.COLUMN_INPUT_ID + " TEXT NOT NULL,"
                     + Channels.COLUMN_ORIGINAL_NETWORK_ID + " INTEGER NOT NULL,"
@@ -381,12 +385,15 @@ public class TvProvider extends ContentProvider {
             if (oldVersion == 21) {
                 db.execSQL("CREATE INDEX IF NOT EXISTS " + PROGRAMS_TABLE_PACKAGE_NAME_INDEX
                         + " on " + PROGRAMS_TABLE + "(" + Programs.COLUMN_PACKAGE_NAME + ");");
-                db.execSQL("CREATE INDEX IF NOT EXISTS " + PROGRAMS_TABLE_CHANNEL_ID_INDEX + " on "
+                db.execSQL("CREATE INDEX IF NOT EXISTS " + PROGRAMS_TABLE_CHANNEL_ID_INDEX + " ON "
                         + PROGRAMS_TABLE + "(" + Programs.COLUMN_CHANNEL_ID + ");");
-                db.execSQL("CREATE INDEX IF NOT EXISTS " + PROGRAMS_TABLE_START_TIME_INDEX + " on "
+                db.execSQL("CREATE INDEX IF NOT EXISTS " + PROGRAMS_TABLE_START_TIME_INDEX + " ON "
                         + PROGRAMS_TABLE + "(" + Programs.COLUMN_START_TIME_UTC_MILLIS + ");");
-                db.execSQL("CREATE INDEX IF NOT EXISTS " + PROGRAMS_TABLE_END_TIME_INDEX + " on "
+                db.execSQL("CREATE INDEX IF NOT EXISTS " + PROGRAMS_TABLE_END_TIME_INDEX + " ON "
                         + PROGRAMS_TABLE + "(" + Programs.COLUMN_END_TIME_UTC_MILLIS + ");");
+                db.execSQL("CREATE INDEX IF NOT EXISTS " + WATCHED_PROGRAMS_TABLE_CHANNEL_ID_INDEX
+                        + " ON " + WATCHED_PROGRAMS_TABLE + "(" + WatchedPrograms.COLUMN_CHANNEL_ID
+                        + ");");
                 oldVersion++;
             }
 
