@@ -441,6 +441,7 @@ public class TvProvider extends ContentProvider {
         buildGenreMap(R.array.genre_mapping_atsc);
         buildGenreMap(R.array.genre_mapping_dvb);
         buildGenreMap(R.array.genre_mapping_isdb);
+        buildGenreMap(R.array.genre_mapping_isdb_br);
     }
 
     @SuppressLint("DefaultLocale")
