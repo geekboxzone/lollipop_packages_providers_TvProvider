@@ -665,10 +665,30 @@ public class TvProvider extends ContentProvider {
     public int delete(Uri uri, String selection, String[] selectionArgs) {
         SqlParams params = createSqlParams(OP_DELETE, uri, selection, selectionArgs);
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
-        if (params.getTables().equals(CHANNELS_TABLE)) {
-            storeChannelStates(params, db);
+        int count = 0;
+        switch (sUriMatcher.match(uri)) {
+            case MATCH_CHANNEL_ID_LOGO:
+                ContentValues values = new ContentValues();
+                values.putNull(CHANNELS_COLUMN_LOGO);
+                count = db.update(params.getTables(), values, params.getSelection(),
+                        params.getSelectionArgs());
+                break;
+            case MATCH_CHANNEL:
+            case MATCH_PROGRAM:
+            case MATCH_WATCHED_PROGRAM:
+            case MATCH_CHANNEL_ID:
+            case MATCH_PASSTHROUGH_ID:
+            case MATCH_PROGRAM_ID:
+            case MATCH_WATCHED_PROGRAM_ID:
+                if (params.getTables().equals(CHANNELS_TABLE)) {
+                    storeChannelStates(params, db);
+                }
+                count = db.delete(params.getTables(), params.getSelection(),
+                        params.getSelectionArgs());
+                break;
+            default:
+                throw new IllegalArgumentException("Unknown URI " + uri);
         }
-        int count = db.delete(params.getTables(), params.getSelection(), params.getSelectionArgs());
         if (count > 0) {
             notifyChange(uri);
         }
@@ -768,6 +788,12 @@ public class TvProvider extends ContentProvider {
                 params.appendWhere(WATCHED_PROGRAMS_COLUMN_CONSOLIDATED + "=?", "1");
                 break;
             case MATCH_CHANNEL_ID_LOGO:
+                if (operation.equals(OP_DELETE)) {
+                    params.setTables(CHANNELS_TABLE);
+                    params.appendWhere(Channels._ID + "=?", uri.getPathSegments().get(1));
+                    break;
+                }
+                // fall-through
             case MATCH_PASSTHROUGH_ID:
                 throw new UnsupportedOperationException("Cannot " + operation + " that URI: "
                         + uri);
