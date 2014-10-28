@@ -82,14 +82,12 @@ public class TvProvider extends ContentProvider {
     private static final String OP_UPDATE = "update";
     private static final String OP_DELETE = "delete";
 
-    private static final int DATABASE_VERSION = 22;
+    private static final int DATABASE_VERSION = 23;
     private static final String DATABASE_NAME = "tv.db";
     private static final String CHANNELS_TABLE = "channels";
     private static final String PROGRAMS_TABLE = "programs";
     private static final String WATCHED_PROGRAMS_TABLE = "watched_programs";
-    // This table stores deleted channels, so that when the same channel is added back,
-    // TvProvider can restore the locked & browsable state.
-    private static final String DELETED_CHANNELS_TABLE = "deleted_channels";
+    private static final String DELETED_CHANNELS_TABLE = "deleted_channels";  // Deprecated
     private static final String PROGRAMS_TABLE_PACKAGE_NAME_INDEX = "programs_package_name_index";
     private static final String PROGRAMS_TABLE_CHANNEL_ID_INDEX = "programs_channel_id_index";
     private static final String PROGRAMS_TABLE_START_TIME_INDEX = "programs_start_time_index";
@@ -279,11 +277,8 @@ public class TvProvider extends ContentProvider {
                     + Channels.COLUMN_INTERNAL_PROVIDER_DATA + " BLOB,"
                     + CHANNELS_COLUMN_LOGO + " BLOB,"
                     + Channels.COLUMN_VERSION_NUMBER + " INTEGER,"
-                    + "UNIQUE(" + Channels._ID + "," + Channels.COLUMN_PACKAGE_NAME + "),"
-                    + "UNIQUE(" + Channels.COLUMN_INPUT_ID + ","
-                            + Channels.COLUMN_ORIGINAL_NETWORK_ID + ","
-                            + Channels.COLUMN_TRANSPORT_STREAM_ID + ","
-                            + Channels.COLUMN_SERVICE_ID + ")"
+                    // Needed for foreign keys in other tables.
+                    + "UNIQUE(" + Channels._ID + "," + Channels.COLUMN_PACKAGE_NAME + ")"
                     + ");");
             db.execSQL("CREATE TABLE " + PROGRAMS_TABLE + " ("
                     + Programs._ID + " INTEGER PRIMARY KEY AUTOINCREMENT,"
@@ -345,62 +340,18 @@ public class TvProvider extends ContentProvider {
                     + ");");
             db.execSQL("CREATE INDEX " + WATCHED_PROGRAMS_TABLE_CHANNEL_ID_INDEX + " ON "
                     + WATCHED_PROGRAMS_TABLE + "(" + WatchedPrograms.COLUMN_CHANNEL_ID + ");");
-            db.execSQL("CREATE TABLE " + DELETED_CHANNELS_TABLE + " ("
-                    + Channels.COLUMN_INPUT_ID + " TEXT NOT NULL,"
-                    + Channels.COLUMN_ORIGINAL_NETWORK_ID + " INTEGER NOT NULL,"
-                    + Channels.COLUMN_TRANSPORT_STREAM_ID + " INTEGER NOT NULL,"
-                    + Channels.COLUMN_SERVICE_ID + " INTEGER NOT NULL,"
-                    + Channels.COLUMN_LOCKED + " INTEGER NOT NULL,"
-                    + Channels.COLUMN_BROWSABLE + " INTEGER NOT NULL,"
-                    + "UNIQUE(" + Channels.COLUMN_INPUT_ID + ","
-                    + Channels.COLUMN_ORIGINAL_NETWORK_ID + ","
-                    + Channels.COLUMN_TRANSPORT_STREAM_ID + "," + Channels.COLUMN_SERVICE_ID + ")"
-                    + ");");
         }
 
         @Override
         public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-            if (oldVersion < 21) {
-                Log.i(TAG, "Upgrading from version " + oldVersion + " to " + newVersion
+            Log.i(TAG, "Upgrading from version " + oldVersion + " to " + newVersion
                     + ", data will be lost!");
-                db.execSQL("DROP TABLE IF EXISTS " + DELETED_CHANNELS_TABLE);
-                db.execSQL("DROP TABLE IF EXISTS " + WATCHED_PROGRAMS_TABLE);
-                db.execSQL("DROP TABLE IF EXISTS " + PROGRAMS_TABLE);
-                db.execSQL("DROP TABLE IF EXISTS " + CHANNELS_TABLE);
+            db.execSQL("DROP TABLE IF EXISTS " + DELETED_CHANNELS_TABLE);
+            db.execSQL("DROP TABLE IF EXISTS " + WATCHED_PROGRAMS_TABLE);
+            db.execSQL("DROP TABLE IF EXISTS " + PROGRAMS_TABLE);
+            db.execSQL("DROP TABLE IF EXISTS " + CHANNELS_TABLE);
 
-                // Clear legacy logo directory
-                File logoPath = new File(mContext.getFilesDir(), "logo");
-                if (logoPath.exists()) {
-                    for (File file : logoPath.listFiles()) {
-                        file.delete();
-                    }
-                    logoPath.delete();
-                }
-
-                onCreate(db);
-                return;
-            }
-
-            Log.i(TAG, "Upgrading from version " + oldVersion + " to " + newVersion);
-            if (oldVersion == 21) {
-                db.execSQL("CREATE INDEX IF NOT EXISTS " + PROGRAMS_TABLE_PACKAGE_NAME_INDEX
-                        + " on " + PROGRAMS_TABLE + "(" + Programs.COLUMN_PACKAGE_NAME + ");");
-                db.execSQL("CREATE INDEX IF NOT EXISTS " + PROGRAMS_TABLE_CHANNEL_ID_INDEX + " ON "
-                        + PROGRAMS_TABLE + "(" + Programs.COLUMN_CHANNEL_ID + ");");
-                db.execSQL("CREATE INDEX IF NOT EXISTS " + PROGRAMS_TABLE_START_TIME_INDEX + " ON "
-                        + PROGRAMS_TABLE + "(" + Programs.COLUMN_START_TIME_UTC_MILLIS + ");");
-                db.execSQL("CREATE INDEX IF NOT EXISTS " + PROGRAMS_TABLE_END_TIME_INDEX + " ON "
-                        + PROGRAMS_TABLE + "(" + Programs.COLUMN_END_TIME_UTC_MILLIS + ");");
-                db.execSQL("CREATE INDEX IF NOT EXISTS " + WATCHED_PROGRAMS_TABLE_CHANNEL_ID_INDEX
-                        + " ON " + WATCHED_PROGRAMS_TABLE + "(" + WatchedPrograms.COLUMN_CHANNEL_ID
-                        + ");");
-                oldVersion++;
-            }
-
-            if (oldVersion != newVersion) {
-                throw new IllegalStateException("error in upgrading the database to version "
-                        + newVersion);
-            }
+            onCreate(db);
         }
     }
 
@@ -542,46 +493,11 @@ public class TvProvider extends ContentProvider {
         }
     }
 
-    private static void restoreChannelState(SQLiteDatabase db, ContentValues values) {
-        String inputId = values.getAsString(Channels.COLUMN_INPUT_ID);
-        Integer onid = values.getAsInteger(Channels.COLUMN_ORIGINAL_NETWORK_ID);
-        Integer tsid = values.getAsInteger(Channels.COLUMN_TRANSPORT_STREAM_ID);
-        Integer serviceId = values.getAsInteger(Channels.COLUMN_SERVICE_ID);
-        if (onid == null) { onid = 0; }
-        if (tsid == null) { tsid = 0; }
-        if (serviceId == null) { serviceId = 0; }
-
-        SqlParams params = new SqlParams(DELETED_CHANNELS_TABLE,
-                "(" + Channels.COLUMN_INPUT_ID + "=?) AND ("
-                + Channels.COLUMN_ORIGINAL_NETWORK_ID + "=?) AND ("
-                + Channels.COLUMN_TRANSPORT_STREAM_ID + "=?) AND ("
-                + Channels.COLUMN_SERVICE_ID + "=?)",
-                inputId, Integer.toString(onid), Integer.toString(tsid),
-                Integer.toString(serviceId));
-
-        SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
-        queryBuilder.setTables(params.getTables());
-        final String[] projection = { Channels.COLUMN_LOCKED, Channels.COLUMN_BROWSABLE };
-        try (Cursor cursor = queryBuilder.query(db, projection, params.getSelection(),
-                params.getSelectionArgs(), null, null, null)) {
-            if (cursor != null && cursor.moveToNext()) {
-                if (!values.containsKey(Channels.COLUMN_LOCKED)) {
-                    values.put(Channels.COLUMN_LOCKED, cursor.getInt(0));
-                }
-                if (!values.containsKey(Channels.COLUMN_BROWSABLE)) {
-                    values.put(Channels.COLUMN_BROWSABLE, cursor.getInt(1));
-                }
-                db.delete(params.getTables(), params.getSelection(), params.getSelectionArgs());
-            }
-        }
-    }
-
     private Uri insertChannel(Uri uri, ContentValues values) {
         // Mark the owner package of this channel.
         values.put(Channels.COLUMN_PACKAGE_NAME, getCallingPackage_());
 
         SQLiteDatabase db = mOpenHelper.getWritableDatabase();
-        restoreChannelState(db, values);
         long rowId = db.insert(CHANNELS_TABLE, null, values);
         if (rowId > 0) {
             Uri channelUri = TvContract.buildChannelUri(rowId);
@@ -641,27 +557,6 @@ public class TvProvider extends ContentProvider {
                 + " COLUMN_WATCH_END_TIME_UTC_MILLIS should be specified");
     }
 
-    private static void storeChannelStates(SqlParams params, SQLiteDatabase db) {
-        SQLiteQueryBuilder queryBuilder = new SQLiteQueryBuilder();
-        queryBuilder.setTables(params.getTables());
-        try (Cursor cursor = queryBuilder.query(db,
-                new String[] { Channels.COLUMN_INPUT_ID, Channels.COLUMN_ORIGINAL_NETWORK_ID,
-                Channels.COLUMN_TRANSPORT_STREAM_ID, Channels.COLUMN_SERVICE_ID,
-                Channels.COLUMN_LOCKED, Channels.COLUMN_BROWSABLE },
-                params.getSelection(), params.getSelectionArgs(), null, null, null)) {
-            ContentValues values = new ContentValues();
-            while (cursor != null && cursor.moveToNext()) {
-                values.put(Channels.COLUMN_INPUT_ID, cursor.getString(0));
-                values.put(Channels.COLUMN_ORIGINAL_NETWORK_ID, cursor.getInt(1));
-                values.put(Channels.COLUMN_TRANSPORT_STREAM_ID, cursor.getInt(2));
-                values.put(Channels.COLUMN_SERVICE_ID, cursor.getInt(3));
-                values.put(Channels.COLUMN_LOCKED, cursor.getInt(4));
-                values.put(Channels.COLUMN_BROWSABLE, cursor.getInt(5));
-                db.insert(DELETED_CHANNELS_TABLE, null, values);
-            }
-        }
-    }
-
     @Override
     public int delete(Uri uri, String selection, String[] selectionArgs) {
         SqlParams params = createSqlParams(OP_DELETE, uri, selection, selectionArgs);
@@ -681,9 +576,6 @@ public class TvProvider extends ContentProvider {
             case MATCH_PASSTHROUGH_ID:
             case MATCH_PROGRAM_ID:
             case MATCH_WATCHED_PROGRAM_ID:
-                if (params.getTables().equals(CHANNELS_TABLE)) {
-                    storeChannelStates(params, db);
-                }
                 count = db.delete(params.getTables(), params.getSelection(),
                         params.getSelectionArgs());
                 break;
