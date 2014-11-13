@@ -858,7 +858,11 @@ public class TvProvider extends ContentProvider {
         if (mode.equals("r")) {
             String sql = queryBuilder.buildQuery(new String[] { CHANNELS_COLUMN_LOGO },
                     params.getSelection(), null, null, null, null);
-            return DatabaseUtils.blobFileDescriptorForQuery(db, sql, params.getSelectionArgs());
+            ParcelFileDescriptor fd = DatabaseUtils.blobFileDescriptorForQuery(db, sql, params.getSelectionArgs());
+            if (fd == null) {
+                throw new FileNotFoundException(uri.toString());
+            }
+            return fd;
         } else {
             try (Cursor cursor = queryBuilder.query(db, new String[] { Channels._ID },
                     params.getSelection(), params.getSelectionArgs(), null, null, null)) {
